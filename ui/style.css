@@ -335,3 +335,22 @@ section {
 #backupCapacity {
   color: #77581e;
 }
+/* Project dialogue remains separate from save-version selection. */
+#agentPanel input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  margin: 6px 0 12px;
+}
+#agentPanel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.6;
+}
+#agentPreviewText {
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px;
+  background: #f1f5f8;
+}

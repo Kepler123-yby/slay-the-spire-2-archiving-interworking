@@ -31,10 +31,17 @@ export class Quark {
     ),
     node = process.execPath,
     notify = () => {},
+    executor,
   }) {
-    Object.assign(this, { workDir, cli, node, notify });
+    Object.assign(this, { workDir, cli, node, notify, executor });
   }
   async run(args) {
+    if (this.executor) {
+      const events = await this.executor(args);
+      result(events);
+      for (const e of events) if (e.notice?.text) this.notify(e.notice.text);
+      return events;
+    }
     await fs.mkdir(this.workDir, { recursive: true });
     await fs.access(this.cli).catch(() => {
       throw Error("尚未安装夸克组件，请运行 npm run setup:quark");

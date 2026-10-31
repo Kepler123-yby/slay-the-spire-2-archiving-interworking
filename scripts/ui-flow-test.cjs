@@ -6,6 +6,17 @@ app.setPath("userData", path.resolve(".data/ui-flow-test"));
 app.whenReady().then(async () => {
   const calls = [];
   let backupRecords = [];
+  let agentState = {
+    bound: false,
+    busy: false,
+    stage: "未绑定",
+    threadId: "01234567-1234-1234-1234-123456789abc",
+    cwd: "/test/project",
+    proxy: "",
+    model: "test-model",
+    messages: 0,
+  };
+  let rejectBinding = true;
   const ids = [
     "11111111-1111-4111-8111-111111111111",
     "22222222-2222-4222-8222-222222222222",
@@ -28,6 +39,49 @@ app.whenReady().then(async () => {
   };
   ipcMain.handle("bridge", async (_event, action, args) => {
     calls.push({ action, ...args });
+    if (action === "agentStatus") return { ok: true, data: agentState };
+    if (action === "agentPreview")
+      return {
+        ok: true,
+        data: {
+          token: "preview-token",
+          messages: [
+            { role: "user", text: "公开对话 <script>不执行</script>" },
+          ],
+          reader: { pages: 1, cli: "/test/codex" },
+          model: "test-model",
+        },
+      };
+    if (action === "agentBind") {
+      if (rejectBinding)
+        return { ok: false, error: "测试：真实入口未通过，不能绑定" };
+      agentState = {
+        ...agentState,
+        bound: true,
+        stage: "项目对话已同步",
+        messages: 1,
+        lastSuccess: "2026-10-31T00:00:00Z",
+      };
+      return { ok: true, data: { messages: 1 } };
+    }
+    if (action === "agentUnbind") {
+      agentState = {
+        ...agentState,
+        bound: false,
+        stage: "未绑定",
+        lastSuccess: null,
+      };
+      return { ok: true, data: "已解除本机绑定" };
+    }
+    if (action === "contextSync") {
+      agentState = {
+        ...agentState,
+        pending: true,
+        error: "测试网络失败",
+        stage: "云端未就绪",
+      };
+      return { ok: false, error: "测试网络失败" };
+    }
     if (action === "status")
       return {
         ok: true,
@@ -73,7 +127,7 @@ app.whenReady().then(async () => {
   });
   const evaluate = (code) => win.webContents.executeJavaScript(code);
   async function waitFor(code) {
-    for (let n = 0; n < 100; n++) {
+    for (let n = 0; n < 160; n++) {
       if (await evaluate(code)) return;
       await new Promise((r) => setTimeout(r, 30));
     }
@@ -182,8 +236,53 @@ app.whenReady().then(async () => {
       path.resolve(".data/ui-backup-management-preview.png"),
       (await win.webContents.capturePage()).toPNG(),
     );
+    await evaluate(
+      "document.getElementById('agentPanel').open=true;document.getElementById('agentPreview').click()",
+    );
+    await waitFor("!document.getElementById('agentBind').disabled");
+    assert.equal(
+      await evaluate(
+        "document.querySelectorAll('#agentPreviewText script').length",
+      ),
+      0,
+    );
+    await evaluate("document.getElementById('agentBind').click()");
+    await waitFor(
+      "document.getElementById('status').textContent.includes('不能绑定')",
+    );
+    assert.equal(agentState.bound, false);
+    assert.equal(
+      await evaluate("document.getElementById('backup').disabled"),
+      false,
+    );
+    rejectBinding = false;
+    await evaluate("document.getElementById('agentBind').click()");
+    await waitFor("!document.getElementById('contextSync').disabled");
+    assert.equal(
+      await evaluate("document.getElementById('agentThread').disabled"),
+      true,
+    );
+    await evaluate("document.getElementById('contextSync').click()");
+    await waitFor(
+      "document.getElementById('agentState').textContent.includes('测试网络失败')",
+    );
+    assert.equal(
+      await evaluate("document.getElementById('backup').disabled"),
+      false,
+    );
+    assert.equal(agentState.pending, true);
+    await evaluate(
+      "document.getElementById('agentPanel').scrollIntoView({block:'center'})",
+    );
+    await fs.writeFile(
+      path.resolve(".data/ui-agent-binding-preview.png"),
+      (await win.webContents.capturePage()).toPNG(),
+    );
+    await evaluate("document.getElementById('agentUnbind').click()");
+    await waitFor("!document.getElementById('agentPreview').disabled");
+    assert.equal(agentState.bound, false);
     console.log(
-      "UI_FLOW_OK: 显式选择、无默认覆盖、切换档位失效、只在点击覆盖后提交选定版本；仅合成数据。",
+      "UI_FLOW_OK: 显式选择、备份限额、Agent 预览、失败不绑定、同步失败保留待办和离线功能、解除绑定；仅合成数据。",
     );
   } catch (e) {
     console.error(e);

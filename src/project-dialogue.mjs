@@ -13,6 +13,7 @@ const phases = new Set([
 
 export function publicText(value) {
   let text = value.trim();
+  if (/^<spire_context_import>/.test(text)) return "";
   // These are transport/instruction envelopes, not user-authored conversation.
   text = text
     .replace(
@@ -36,7 +37,7 @@ export function publicText(value) {
   }
   // Exclude, rather than silently retaining, messages carrying authentication material.
   if (
-    /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9_.-]{16,})|(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|authorization|cookie)\s*["']?\s*[:=]\s*["']?[^\s"'\n,}]{8,}/i.test(
+    /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9_.-]{16,})|(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|authorization|cookie)\s*["']?\s*[:=]\s*["']?[^\s"'\n,}]+/i.test(
       text,
     )
   )
@@ -94,6 +95,15 @@ export function validateDialogue(archive) {
   const seen = new Set();
   for (const m of archive.messages) {
     if (
+      Object.keys(m).some(
+        (k) => !["id", "source", "role", "time", "text"].includes(k),
+      ) ||
+      Object.keys(m.source || {}).some(
+        (k) => !["agent", "threadId", "messageId"].includes(k),
+      )
+    )
+      throw Error("项目对话包含不允许的附加字段");
+    if (
       !/^[a-f0-9]{64}$/.test(m.id) ||
       seen.has(m.id) ||
       !["user", "assistant"].includes(m.role) ||
@@ -114,11 +124,25 @@ export function dialogueHash(archive) {
   validateDialogue(archive);
   return hash(
     JSON.stringify(
-      [...archive.messages].sort((a, b) =>
-        a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
-      ),
+      archive.messages
+        .map(canonicalMessage)
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     ),
   );
+}
+
+function canonicalMessage(m) {
+  return {
+    id: m.id,
+    source: {
+      agent: m.source.agent,
+      threadId: m.source.threadId,
+      messageId: m.source.messageId,
+    },
+    role: m.role,
+    time: m.time ?? null,
+    text: m.text,
+  };
 }
 
 export function mergeDialogues(archives) {
@@ -127,9 +151,21 @@ export function mergeDialogues(archives) {
     validateDialogue(archive);
     for (const message of archive.messages) {
       const previous = messages.get(message.id);
-      if (previous && JSON.stringify(previous) !== JSON.stringify(message))
+      if (
+        previous &&
+        (previous.text !== message.text ||
+          previous.role !== message.role ||
+          previous.source.agent !== message.source.agent ||
+          previous.source.threadId !== message.source.threadId ||
+          previous.source.messageId !== message.source.messageId)
+      )
         throw Error("同一来源消息内容冲突，未覆盖已有对话");
-      messages.set(message.id, message);
+      const merged = canonicalMessage(message);
+      if (previous?.time)
+        merged.time = merged.time
+          ? [previous.time, merged.time].sort()[0]
+          : previous.time;
+      messages.set(message.id, merged);
     }
   }
   return validateDialogue({

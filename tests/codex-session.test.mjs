@@ -241,3 +241,62 @@ test("可执行文件探测不执行 PATH 内容", async () => {
     [],
   );
 });
+test("短的明确凭据同样排除，时间补全不构成正文冲突", () => {
+  for (const field of [
+    "password",
+    "api_key",
+    "access_token",
+    "refresh_token",
+    "authorization",
+    "cookie",
+  ])
+    assert.equal(
+      messageFromItem(user(field, `${field}="short"`), source),
+      null,
+    );
+  const m = messageFromItem(user("timestamp", "同一正文"), source);
+  const a = { schemaVersion: 1, project: PROJECT_ID, messages: [m] };
+  const b = { ...a, messages: [{ ...m, time: "2026-10-31T00:00:00.000Z" }] };
+  assert.equal(mergeDialogues([a, b]).messages[0].time, b.messages[0].time);
+  assert.equal(
+    dialogueHash(mergeDialogues([a, b])),
+    dialogueHash(mergeDialogues([b, a])),
+  );
+});
+test("导入的起始提示与其自动回复整回合排除", async () => {
+  const result = await readCodexSession({
+    threadId,
+    cwd: process.cwd(),
+    candidates: ["fake"],
+    connect() {
+      return {
+        async initialize() {},
+        close() {},
+        async request(method) {
+          if (method === "thread/read") return metadata;
+          return {
+            data: [
+              {
+                ...user(
+                  "import",
+                  "<spire_context_import>参考资料</spire_context_import>",
+                ),
+                turnId: "bootstrap",
+              },
+              {
+                turnId: "bootstrap",
+                item: { type: "agentMessage", id: "ack", text: "已读取" },
+              },
+              { ...user("real", "真正的新问题"), turnId: "next" },
+            ],
+            nextCursor: null,
+          };
+        },
+      };
+    },
+  });
+  assert.deepEqual(
+    result.archive.messages.map((m) => m.text),
+    ["真正的新问题"],
+  );
+});

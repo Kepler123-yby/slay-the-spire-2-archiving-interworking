@@ -53,6 +53,7 @@ export async function readCodexSession({
   threadId,
   cwd,
   candidates,
+  signal,
   connect = (cli) => new CodexRPC(cli, { cwd }),
 }) {
   if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(threadId || ""))
@@ -62,9 +63,13 @@ export async function readCodexSession({
   if (!choices.length) throw Error("未找到 Codex CLI 或桌面端自带接口");
   const failures = [];
   for (const cli of choices) {
+    if (signal?.aborted) throw Error("会话读取已取消");
     let rpc;
+    const cancel = () => rpc?.close();
     try {
       rpc = connect(cli);
+      signal?.addEventListener("abort", cancel, { once: true });
+      if (signal?.aborted) throw Error("会话读取已取消");
       await rpc.initialize();
       const { thread } = await rpc.request("thread/read", {
         threadId,
@@ -82,7 +87,20 @@ export async function readCodexSession({
         pages = 0,
         cursor,
         entries = 0;
+      const importedTurns = new Set();
       const consume = (entry) => {
+        if (
+          entry.item?.type === "userMessage" &&
+          entry.item.content?.some(
+            (b) =>
+              b.type === "text" && /^<spire_context_import>/.test(b.text || ""),
+          )
+        )
+          importedTurns.add(entry.turnId);
+        if (entry.turnId && importedTurns.has(entry.turnId)) {
+          excluded++;
+          return;
+        }
         const m = messageFromItem(entry, source);
         if (m) {
           const previous = messages.get(m.id);
@@ -131,7 +149,8 @@ export async function readCodexSession({
         )
           throw Error("旧版会话历史无效");
         for (const turn of history.thread.turns)
-          for (const item of turn.items || []) consume({ item });
+          for (const item of turn.items || [])
+            consume({ item, turnId: turn.id });
       }
       const archive = validateDialogue({
         schemaVersion: 1,
@@ -150,9 +169,11 @@ export async function readCodexSession({
         },
       };
     } catch (error) {
+      if (signal?.aborted) throw Error("会话读取已取消");
       failures.push({ cli, message: error.message, code: error.code });
       if (!unsupported(error)) throw error;
     } finally {
+      signal?.removeEventListener("abort", cancel);
       rpc?.close();
     }
   }

@@ -1,6 +1,6 @@
 # Agent Binding Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 普通终端启动后能使用真实绑定 Agent 同步本项目公开对话，保留离线存档管理。
 
@@ -33,9 +33,9 @@
 
 **Interfaces:** 输入本机 CLI 路径；输出真实执行结果与通过/失败。清理继承的 Agent 身份环境，不新增任何身份变量。
 
-- [ ] 从普通环境启动 `codex exec --ephemeral --json --sandbox read-only`，要求执行固定 `resolve-agent` 命令，限制总耗时并清理本工具启动的进程组。
-- [ ] 仅实际工具输出成功才通过；随后隔离目录执行夸克上传/下载/哈希闭环。
-- [ ] 若失败，记录准确错误并停止该适配器产品集成；保留已有功能，不伪造成功。可排查权限、网络、模型访问并重试合理的实际入口。
+- [x] 从普通环境启动 `codex exec --ephemeral --json --sandbox read-only`，要求执行固定 `resolve-agent` 命令，限制总耗时并清理本工具启动的进程组。
+- [x] 仅实际工具输出成功才通过；随后隔离目录执行夸克上传/下载/哈希闭环。
+- [x] 若失败，记录准确错误并停止该适配器产品集成；保留已有功能，不伪造成功。可排查权限、网络、模型访问并重试合理的实际入口。
 
 ### Task 2: 本机绑定和有界真实任务执行
 
@@ -43,10 +43,10 @@
 
 **Interfaces:** `BindingStore.read()/save(binding)/clear()`；`AgentRunner.run(task,{signal})` 返回由 worker 验证的类型化结果；`detectAgents()` 返回已安装适配器及可用性。Quark 可注入 `run(args)` 执行器。
 
-- [ ] 测试未知适配器、非法路径、云端配置注入、错任务 ID、重复结果、超时及取消都失败；绑定原子持久化且仅本机。
-- [ ] 实现参数数组启动固定入口，以本机一次性受限 IPC 交换任务和结果；worker 只接收允许的夸克命令及本机受限文件路径，结果有上限。
-- [ ] 实测后台任务退出和异常时只清理自建进程；真实执行通过后将 Quark 接入该 runner。
-- [ ] 运行 `node --test tests/agent-*.test.mjs` 并提交。
+- [x] 测试未知适配器、非法路径、云端配置注入、错任务 ID、重复结果、超时及取消都失败；绑定原子持久化且仅本机。
+- [x] 实现参数数组启动固定入口，以本机一次性受限 IPC 交换任务和结果；worker 只接收允许的夸克命令及本机受限文件路径，结果有上限。
+- [x] 实测后台任务退出和异常时只清理自建进程；真实执行通过后将 Quark 接入该 runner。
+- [x] 运行 `node --test tests/agent-*.test.mjs` 并提交。
 
 ### Task 3: 白名单对话导出和合并
 
@@ -54,10 +54,10 @@
 
 **Interfaces:** `exportDialogue(session)`、`mergeDialogues(archives)`、`validateDialogue(archive)`、`dialogueHash(archive)`；规范消息 `{id,source,role,time,text}`，项目标识固定。
 
-- [ ] 测试混合公开消息/推理/工具/环境包装/认证字段，只保留允许内容；绑定 ID 不匹配时拒绝；超出 8 MiB/50000 条拒绝；截断不得覆盖完整历史。
-- [ ] 使用 Codex 官方结构化会话读取，导出选定会话，稳定 ID 去重；合并保留不同来源及分支；运行会话与导入边界明确排除。
-- [ ] 测试连续导入导出和后台任务均不新增对话；不读取认证目录，不自动执行聊天内容。
-- [ ] 运行 `node --test tests/project-dialogue.test.mjs` 并提交。
+- [x] 测试混合公开消息/推理/工具/环境包装/认证字段，只保留允许内容；绑定 ID 不匹配时拒绝；超出 8 MiB/50000 条拒绝；截断不得覆盖完整历史。
+- [x] 使用 Codex 官方结构化会话读取，导出选定会话，稳定 ID 去重；合并保留不同来源及分支；运行会话与导入边界明确排除。
+- [x] 测试连续导入导出和后台任务均不新增对话；不读取认证目录，不自动执行聊天内容。
+- [x] 运行 `node --test tests/project-dialogue.test.mjs` 并提交。
 
 ### Task 4: 可校验的云端对话修订
 
@@ -65,10 +65,10 @@
 
 **Interfaces:** `ContextSync.status()/sync()/preview()`；使用现有 `Quark.mkdir/list/put/get`，固定目录 `STS2-SaveSync/project-context/spire-save-bridge/`。
 
-- [ ] 用内存夸克测试无变化不上传、并发分支合并、坏哈希和缺完成标记排除、失败保留待办。
-- [ ] 实现有界不可变修订及完成标记；上传回读通过才提交本地同步状态；限制清单/下载数量和字节，不按机器时钟丢弃分支。
-- [ ] 隔离云端目录进行实际公开对话上传与恢复验证，凭据和本机绑定不进入文件。
-- [ ] 运行 `node --test tests/context-sync.test.mjs` 并提交。
+- [x] 用内存夸克测试无变化不上传、并发分支合并、坏哈希和缺完成标记排除、失败保留待办。
+- [x] 实现有界不可变修订及完成标记；上传回读通过才提交本地同步状态；限制清单/下载数量和字节，不按机器时钟丢弃分支。
+- [x] 隔离云端目录进行实际公开对话上传与恢复验证，凭据和本机绑定不进入文件。
+- [x] 运行 `node --test tests/context-sync.test.mjs` 并提交。
 
 ### Task 5: 界面、启动恢复、文档与验收
 
@@ -76,11 +76,13 @@
 
 **Interfaces:** IPC `agentStatus/agentPreview/agentBind/contextSync/agentUnbind/contextContinue`，渲染器不能直接传入可执行命令；启动后台同步，60 秒仅检查本地变化。
 
-- [ ] 增加绑定来源预览、CLI 状态、消息数、上次成功、待办、错误、重试、解绑与继续对话命令；启用前披露模型额度和云端修订限制。
-- [ ] 保持现有本地功能可用；未验证适配器明确未支持；运行任务串行，关闭时取消并保留待办。
-- [ ] UI 合成测试绑定/取消/失败/恢复状态与备份互不干扰；运行 `npm test`、`npm run test:ui`，清洁环境启动真实 Mac 构建验证。
-- [ ] 更新通用 README 与可执行 Windows 验证步骤，构建 Mac 包和源代码包；提交并推送已授权 GitHub。
+- [x] 增加绑定来源预览、CLI 状态、消息数、上次成功、待办、错误、重试、解绑与继续对话命令；启用前披露模型额度和云端修订限制。
+- [x] 保持现有本地功能可用；未验证适配器明确未支持；运行任务串行，关闭时取消并保留待办。
+- [x] UI 合成测试绑定/取消/失败/恢复状态与备份互不干扰；运行 `npm test`、`npm run test:ui`，清洁环境启动真实 Mac 构建验证。
+- [x] 更新通用 README 与可执行 Windows 验证步骤，构建 Mac 包和源代码包；提交并推送已授权 GitHub。
 
 ## 执行记录
 
 任务 1 是硬前置：不能通过时，后续产品集成不开始。探针和诊断文档可以交付，但必须明确功能未完成及准确阻塞原因。
+
+2026-10-31 执行完成：50 项 Node 测试、隔离 UI 流程、真实 Agent 识别及夸克探针、105 条公开对话上传与隔离恢复、普通终端启动 106 条公开对话同步均通过。独立审阅发现的问题已修复并复核。Windows 交付验证步骤，未标记为实机通过。

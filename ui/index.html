@@ -86,6 +86,49 @@
         <div id="status" role="status" aria-live="polite">
           准备就绪。真实存档尚未上传或修改。
         </div>
+        <details id="agentPanel">
+          <summary>Agent 与项目对话</summary>
+          <p class="hint">
+            绑定后，普通终端 npm start 会自动调用本机 Agent
+            同步项目对话，可能消耗模型额度。两端仍需安装并登录
+            Agent。对话云端暂保留多个修订；不会自动操作游戏存档。
+          </p>
+          <pre id="agentState" role="status">正在读取本机绑定…</pre>
+          <label for="agentCwd">本机项目目录</label
+          ><input id="agentCwd" type="text" />
+          <label for="agentThread">本机 Codex 项目会话 UUID</label
+          ><input
+            id="agentThread"
+            type="text"
+            placeholder="已有会话 ID；新设备可点击新建"
+          />
+          <label for="agentProxy">本机 HTTP(S) 代理（可选，不含账号口令）</label
+          ><input
+            id="agentProxy"
+            type="url"
+            placeholder="http://127.0.0.1:端口"
+          />
+          <div class="utility-actions">
+            <button id="agentLogin">CLI 官方登录</button
+            ><button id="agentCreate">新建本机项目会话</button
+            ><button id="agentPreview">预览所选项目对话</button
+            ><button id="agentBind" disabled>绑定并同步项目对话</button>
+          </div>
+          <details>
+            <summary>公开对话预览</summary>
+            <pre id="agentPreviewText">
+预览后才可绑定。此处不显示内部推理或工具日志。</pre
+            >
+          </details>
+          <div class="utility-actions">
+            <button id="contextPreview" disabled>查看已恢复对话</button>
+            <button id="contextSync" disabled>同步项目对话</button
+            ><button id="agentContinue" disabled>复制继续对话命令</button
+            ><button id="agentUnbind" disabled>解除本机绑定</button
+            ><button id="agentCancel" disabled>取消后台任务</button>
+          </div>
+          <pre id="agentCommand"></pre>
+        </details>
       </section>
     </main>
     <script type="module" src="app.js"></script>

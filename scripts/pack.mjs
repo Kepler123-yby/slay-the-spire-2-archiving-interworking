@@ -21,6 +21,15 @@ if (!electronZipDir && process.platform === "darwin" && platform === "darwin") {
     } catch {}
   }
 }
+// Package only distributable component scripts, never its authorization/task caches.
+const quarkResource = path.resolve(".data/pack-resources/quark");
+await fs.rm(quarkResource, { recursive: true, force: true });
+await fs.mkdir(path.join(quarkResource, "scripts"), { recursive: true });
+for (const name of ["quark-drive.cjs", "hash-worker.cjs"])
+  await fs.copyFile(
+    path.join(".runtime/quark/scripts", name),
+    path.join(quarkResource, "scripts", name),
+  );
 const result = await packager({
   dir: ".",
   name: "SpireSaveBridge",
@@ -30,12 +39,13 @@ const result = await packager({
   electronZipDir,
   out: "dist",
   overwrite: true,
-  extraResource: [".runtime/quark"],
+  extraResource: [quarkResource],
   ignore: [
     /^\/dist(?:\/|$)/,
     /^\/tests(?:\/|$)/,
     /^\/\.git(?:\/|$)/,
     /^\/\.data(?:\/|$)/,
+    /^\/\.runtime(?:\/|$)/,
     /^\/node_modules(?:\/|$)/,
   ],
   prune: false,

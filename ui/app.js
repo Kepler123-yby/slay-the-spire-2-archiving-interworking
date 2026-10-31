@@ -1,5 +1,6 @@
 import { VersionSelection } from "./version-selection.mjs";
 import { metrics, characterTable, cloudSummary } from "./summary-view.mjs";
+import { initAgentUI } from "./agent-ui.mjs";
 const $ = (id) => document.getElementById(id);
 let busy = false,
   profiles = [];
@@ -7,6 +8,7 @@ let backupItems = [],
   backupLimit = 2,
   backupCount = null;
 const selection = new VersionSelection();
+let agentUI;
 const scope = () => key() + "|" + $("group").value;
 function status(text, error = false) {
   $("status").textContent = text;
@@ -34,9 +36,14 @@ function buttons() {
       record.profile !== p.profile ||
       record.group !== $("group").value;
   });
-  $("upload").disabled = busy || !profiles.find((p) => p.key === key());
+  $("upload").disabled =
+    busy || agentUI?.busy || !profiles.find((p) => p.key === key());
+  for (const id of ["refresh", "login", "probe"])
+    $(id).disabled = busy || agentUI?.busy;
   $("cloudVersion").disabled = busy || !selection.versions.length;
-  $("overwrite").disabled = busy || full || !selection.selected(scope());
+  $("overwrite").disabled =
+    busy || agentUI?.busy || full || !selection.selected(scope());
+  agentUI?.renderButtons(busy);
 }
 async function call(action, args = {}) {
   if (busy) return;
@@ -290,4 +297,5 @@ async function mutate(action, args) {
     status(message);
   }
 }
+agentUI = initAgentUI({ call, onChange: buttons });
 init();

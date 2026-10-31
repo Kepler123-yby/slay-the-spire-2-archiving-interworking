@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, clipboard } = require("electron");
 const path = require("node:path");
 const userDataPath =
   process.env.SPIRE_SMOKE === "1"
@@ -19,6 +19,7 @@ if (!app.requestSingleInstanceLock()) {
       { summarize },
       { readEnvironment },
       { Backups },
+      { AgentManager },
     ] = await Promise.all([
       import("./quark.mjs"),
       import("./service.mjs"),
@@ -28,18 +29,28 @@ if (!app.requestSingleInstanceLock()) {
       import("./summary.mjs"),
       import("./environment.mjs"),
       import("./backups.mjs"),
+      import("./agent-manager.mjs"),
     ]);
     const fs = require("node:fs/promises");
     const stateDir = app.isPackaged
       ? app.getPath("userData")
       : path.resolve(".data/desktop");
     await fs.mkdir(stateDir, { recursive: true });
+    let quarkCLI;
+    if (app.isPackaged) {
+      const scripts = path.join(userDataPath, "quark-runtime", "scripts");
+      await fs.mkdir(scripts, { recursive: true });
+      for (const name of ["quark-drive.cjs", "hash-worker.cjs"])
+        await fs.copyFile(
+          path.join(process.resourcesPath, "quark", "scripts", name),
+          path.join(scripts, name),
+        );
+      quarkCLI = path.join(scripts, "quark-drive.cjs");
+    }
     const notices = [];
     const q = new Quark({
       workDir: path.join(stateDir, "quark"),
-      cli: app.isPackaged
-        ? path.join(process.resourcesPath, "quark/scripts/quark-drive.cjs")
-        : undefined,
+      cli: quarkCLI,
       notify: (t) => notices.push(t),
     });
     const backupStore = new Backups({
@@ -61,6 +72,13 @@ if (!app.requestSingleInstanceLock()) {
             ],
     });
     const service = new Service({ quark: q, stateDir, backupStore });
+    const agents = new AgentManager({
+      root: path.join(userDataPath, "agent"),
+      projectDir: process.cwd(),
+      quark: q,
+      allowedRoots: [stateDir, userDataPath],
+    });
+    await agents.init();
     const win = new BrowserWindow({
       width: 1080,
       height: 780,
@@ -84,6 +102,90 @@ if (!app.requestSingleInstanceLock()) {
       )
         return { ok: false, error: "请求来源无效" };
       try {
+        if (
+          [
+            "agentStatus",
+            "agentPreview",
+            "agentBind",
+            "agentUnbind",
+            "agentContinue",
+            "agentLogin",
+            "agentCreate",
+            "agentCancel",
+            "contextPreview",
+            "contextSync",
+          ].includes(action)
+        ) {
+          if (
+            ![
+              "agentStatus",
+              "agentContinue",
+              "agentCancel",
+              "contextPreview",
+            ].includes(action) &&
+            service.busy
+          )
+            throw Error("请等待存档任务完成");
+          let data;
+          if (action === "agentStatus") data = await agents.status();
+          else if (action === "contextPreview")
+            data = await agents.restoredPreview();
+          else if (action === "agentPreview")
+            data = await agents.preview({
+              threadId: args.threadId,
+              proxy: args.proxy || "",
+              cwd: args.cwd || process.cwd(),
+            });
+          else if (action === "agentLogin")
+            data = await agents.login({
+              proxy: args.proxy || "",
+              cwd: args.cwd || process.cwd(),
+            });
+          else if (action === "agentCreate")
+            data = await agents.createSession({
+              proxy: args.proxy || "",
+              cwd: args.cwd || process.cwd(),
+            });
+          else if (action === "agentBind") {
+            const answer = await dialog.showMessageBox(win, {
+              type: "question",
+              buttons: ["取消", "绑定并同步项目对话"],
+              defaultId: 0,
+              cancelId: 0,
+              message: "绑定本机 Agent 并上传预览中的项目对话？",
+              detail:
+                "仅同步所选会话的公开对话。后续启动会自动调用真实 Agent，可能消耗模型额度。云端暂时保留多个修订，不会覆盖游戏存档。每台设备仍需安装并登录 Agent。",
+            });
+            if (answer.response !== 1) throw Error("操作已取消");
+            data = await agents.bind(args.token);
+          } else if (action === "agentUnbind") {
+            const answer = await dialog.showMessageBox(win, {
+              type: "warning",
+              buttons: ["取消", "解除绑定"],
+              defaultId: 0,
+              cancelId: 0,
+              message: "解除本机绑定并删除工具内的对话缓存？",
+              detail: "不会删除 Agent 原会话、游戏存档或云端对话。",
+            });
+            if (answer.response !== 1) throw Error("操作已取消");
+            await agents.unbind();
+            data = "已解除本机绑定";
+          } else if (action === "agentContinue") {
+            data = { command: agents.continueCommand() };
+            clipboard.writeText(data.command);
+          } else if (action === "agentCancel") {
+            agents.stop();
+            data = "已请求取消后台任务；待同步记录保留";
+          } else data = await agents.sync();
+          return { ok: true, data };
+        }
+        if (
+          ["login", "probe", "versions", "upload", "download"].includes(
+            action,
+          ) &&
+          (agents.busy || agents.runner?.busy)
+        )
+          throw Error("项目对话正在同步，请稍候；本地功能仍可使用");
         const profiles = await discover();
         const source = profiles.find(
           (p) => p.account + "-" + p.profile + "-" + p.layout === args.key,
@@ -199,6 +301,44 @@ if (!app.requestSingleInstanceLock()) {
       }
     });
     await win.loadFile(path.join(__dirname, "../ui/index.html"));
+    if (process.env.SPIRE_SMOKE !== "1") {
+      const startupSync = agents.binding
+        ? agents.sync()
+        : Promise.resolve(null);
+      startupSync.catch(() => {});
+      const timer = setInterval(() => {
+        if (
+          agents.binding &&
+          !agents.busy &&
+          !agents.runner?.busy &&
+          !service.busy
+        )
+          agents.sync({ onlyChanged: true }).catch(() => {});
+      }, 60000);
+      app.on("before-quit", () => {
+        clearInterval(timer);
+        agents.stop();
+      });
+      if (process.env.SPIRE_AGENT_SMOKE === "1") {
+        try {
+          const result = await startupSync;
+          if (!result || !agents.binding || !result.lastSuccess)
+            throw Error("未配置或未完成真实绑定启动同步");
+          console.log(
+            "AGENT_STARTUP_OK: " +
+              JSON.stringify({
+                messages: result.messages,
+                uploaded: result.uploaded,
+                cloudRevisions: result.cloudRevisions,
+              }),
+          );
+          app.quit();
+        } catch (error) {
+          console.error("AGENT_STARTUP_FAILED: " + error.message);
+          app.exit(1);
+        }
+      }
+    }
     if (process.env.SPIRE_SMOKE === "1") {
       await new Promise((r) => setTimeout(r, 1200));
       const disabled = await win.webContents.executeJavaScript(
