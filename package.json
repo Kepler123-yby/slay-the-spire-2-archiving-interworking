@@ -2,7 +2,7 @@
   "name": "spire-save-bridge",
   "version": "0.1.3",
   "private": true,
-  "description": "Slay the Spire 2 Quark save bridge \u2014 Mac validation build",
+  "description": "Slay the Spire 2 Quark save bridge — Mac validation build",
   "type": "module",
   "main": "src/main.cjs",
   "scripts": {
@@ -15,7 +15,8 @@
     "pack:windows": "node scripts/pack.mjs win32",
     "probe:roundtrip": "node scripts/roundtrip-probe.mjs",
     "test:ui": "electron scripts/ui-flow-test.cjs",
-    "agent:check": "node .runtime/quark/scripts/quark-drive.cjs resolve-agent"
+    "agent:check": "node .runtime/quark/scripts/quark-drive.cjs resolve-agent",
+    "context:export": "node scripts/export-project-dialogue.mjs"
   },
   "engines": {
     "node": ">=22"
