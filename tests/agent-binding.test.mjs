@@ -10,6 +10,7 @@ import {
 } from "../src/agent-binding.mjs";
 import { ordinaryEnvironment } from "../src/agent-runner.mjs";
 import { validateQuarkTask } from "../src/agent-worker.mjs";
+import { Quark } from "../src/quark.mjs";
 const binding = {
   version: 1,
   agent: "codex",
@@ -72,4 +73,68 @@ test("worker 拒绝任意命令、删除及目录外上传", () => {
     ["browse", "--parent-fid", "123", "--all", "--task-dir", "/outside"],
   ])
     assert.throws(() => validateQuarkTask({ root, args }), /不允许/);
+});
+
+test("完整签名 FID 原样通过下载及目录操作，不当作本地文件路径", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "spire-signed-fid-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const fid = "signed.v1:" + "A".repeat(160) + "+/=|file_123";
+  for (const args of [
+    ["download", "--fid", fid, "--output-dir", path.join(root, "downloads")],
+    ["browse", "--parent-fid", fid, "--all", "--task-dir", root],
+    ["create-folder", "--dir-path", "profile1", "--parent-fid", fid],
+    ["upload", path.join(root, "snapshot.json"), "--parent-fid", fid],
+  ])
+    assert.doesNotThrow(() => validateQuarkTask({ root, args }));
+  let downloads = 0;
+  const quark = new Quark({
+    workDir: root,
+    executor: async (args) => {
+      validateQuarkTask({ root, args });
+      assert.equal(args[0], "download");
+      assert.equal(args[2], fid);
+      downloads++;
+      await fs.writeFile(path.join(args[4], "snapshot.json"), "fixture");
+      return [{ type: "result", code: 0, data: {} }];
+    },
+  });
+  assert.equal(await fs.readFile(await quark.get(fid), "utf8"), "fixture");
+  assert.equal(downloads, 1);
+  for (const invalid of [
+    "",
+    " ",
+    "a\nb",
+    "a\0b",
+    "--output-dir",
+    "x".repeat(4097),
+  ]) {
+    assert.throws(
+      () =>
+        validateQuarkTask({
+          root,
+          args: [
+            "download",
+            "--fid",
+            invalid,
+            "--output-dir",
+            path.join(root, "downloads"),
+          ],
+        }),
+      /不允许|无效/,
+    );
+  }
+  assert.throws(
+    () =>
+      validateQuarkTask({
+        root,
+        args: [
+          "download",
+          "--fid",
+          fid,
+          "--output-dir",
+          path.join(root, "..", "outside"),
+        ],
+      }),
+    /不允许/,
+  );
 });

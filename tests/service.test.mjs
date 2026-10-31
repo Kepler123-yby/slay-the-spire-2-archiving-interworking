@@ -4,6 +4,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Service, heads, conflict } from "../src/service.mjs";
+import { Quark } from "../src/quark.mjs";
+import { validateQuarkTask } from "../src/agent-worker.mjs";
 class FakeCloud {
   constructor(root) {
     this.root = root;
@@ -29,6 +31,69 @@ class FakeCloud {
     return fid;
   }
 }
+
+test("签名下载句柄经过worker校验后可覆盖合成存档，并保留覆盖前备份", async (t) => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), "spire-signed-download-"),
+  );
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const p = {
+    account: "76561198000000000",
+    profile: "profile1",
+    group: "modded",
+    dir: path.join(root, "saves"),
+  };
+  await fs.mkdir(p.dir);
+  await fs.writeFile(path.join(p.dir, "progress.save"), "remote fixture");
+  await fs.writeFile(path.join(p.dir, "prefs.save"), "local preferences");
+  const backend = new FakeCloud(path.join(root, "cloud"));
+  const handles = new Map();
+  const list = backend.list.bind(backend);
+  backend.list = async (dir) =>
+    (await list(dir)).map((item) => {
+      const fid = "signed-fixture|" + Buffer.from(item.fid).toString("base64");
+      handles.set(fid, item.fid);
+      return { ...item, fid };
+    });
+  const workDir = path.join(root, "quark");
+  const downloads = new Quark({
+    workDir,
+    executor: async (args) => {
+      validateQuarkTask({ root: workDir, args });
+      assert.equal(args[0], "download");
+      assert.ok(args[2].includes("|"));
+      const source = handles.get(args[2]);
+      assert.ok(source);
+      await fs.copyFile(source, path.join(args[4], path.basename(source)));
+      return [{ type: "result", code: 0, data: {} }];
+    },
+  });
+  backend.get = (fid) => downloads.get(fid);
+  const service = new Service({
+    quark: backend,
+    stateDir: path.join(root, "state"),
+    checkGame: async () => {},
+  });
+  await service.upload(p);
+  const [version] = await service.versions(p);
+  await fs.writeFile(path.join(p.dir, "progress.save"), "before overwrite");
+  await service.download(p, version.id, true);
+  assert.equal(
+    await fs.readFile(path.join(p.dir, "progress.save"), "utf8"),
+    "remote fixture",
+  );
+  assert.equal(
+    await fs.readFile(path.join(p.dir, "prefs.save"), "utf8"),
+    "local preferences",
+  );
+  const backups = await service.backups(p);
+  assert.equal(backups.length, 1);
+  await service.restore(p, backups[0], true);
+  assert.equal(
+    await fs.readFile(path.join(p.dir, "progress.save"), "utf8"),
+    "before overwrite",
+  );
+});
 
 test("上传快照和完成标记延迟可见时等待发布，不重复上传", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "spire-publish-lag-"));

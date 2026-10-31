@@ -28,7 +28,14 @@ export function validateQuarkTask(task) {
   )
     throw Error("夸克任务无效");
   const a = task.args,
-    fid = (s) => typeof s === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(s);
+    // The SDK returns opaque signed handles (including '|'), not bare file IDs.
+    // They remain a single spawn argv value; local output paths are checked below.
+    fid = (s) =>
+      typeof s === "string" &&
+      s.length > 0 &&
+      Buffer.byteLength(s, "utf8") <= 4096 &&
+      !s.startsWith("-") &&
+      !/[\s\x00-\x1f\x7f]/.test(s);
   const valid =
     (a.length === 1 && ["resolve-agent", "login"].includes(a[0])) ||
     (a[0] === "create-folder" &&
