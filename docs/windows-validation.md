@@ -6,7 +6,7 @@
 
 - 使用 64 位 Windows 10/11、Node.js 22+、Steam 和现有 Mod 环境。
 - 将项目源代码放到本地普通目录，不能只复制 Mac `.app`。
-- **从 Windows Codex 的项目任务环境执行命令**。夸克官方 1.0.25 公开说明仅支持 Windows WSL，原生路径属于本次待验证目标。本项目用 Node 原生启动，不要求安装 WSL，也不伪造 Agent 标识；如果官方工具拒绝 Windows 或 Agent 环境，记录原错误并停止，不能将此判为“已支持”。
+- **从夸克组件能够识别的真实 Agent 宿主环境执行命令**，如 Codex、Claude Code、Cursor 等；能否在相应版本中识别，需要实际运行 `npm.cmd run agent:check` 检查，再通过界面的连接验证。当前项目只在 Codex 环境完成 Mac 实测，其他宿主仍需验证。夸克官方 1.0.25 公开说明仅支持 Windows WSL，原生路径属于本次待验证目标。本项目用 Node 原生启动，不要求安装 WSL，也不伪造 Agent 标识；如果官方工具拒绝 Windows 或 Agent 环境，记录原错误并停止，不能将此判为“已支持”。
 - 先在 Windows 游戏内记录各角色战绩与 Mod 环境，并确认实际档位和启用的 Mod。完全退出游戏。
 
 ## 自动检查
@@ -27,7 +27,7 @@ npm.cmd ci
 npm.cmd run setup:quark
 npm.cmd test
 npm.cmd run doctor
-node .runtime\quark\scripts\quark-drive.cjs resolve-agent
+npm.cmd run agent:check
 npm.cmd start
 ```
 

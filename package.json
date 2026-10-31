@@ -14,7 +14,8 @@
     "pack:mac": "node scripts/pack.mjs darwin",
     "pack:windows": "node scripts/pack.mjs win32",
     "probe:roundtrip": "node scripts/roundtrip-probe.mjs",
-    "test:ui": "electron scripts/ui-flow-test.cjs"
+    "test:ui": "electron scripts/ui-flow-test.cjs",
+    "agent:check": "node .runtime/quark/scripts/quark-drive.cjs resolve-agent"
   },
   "engines": {
     "node": ">=22"
