@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Quark } from "./quark.mjs";
 import { ContextSync } from "./context-sync.mjs";
+import { runSaveTask } from "./save-task.mjs";
 import { atomicJSON } from "./snapshot.mjs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -59,7 +60,7 @@ export function validateQuarkTask(task) {
 async function main() {
   const request = path.resolve(process.argv[2] || "");
   const st = await fs.lstat(request);
-  if (!st.isFile() || st.isSymbolicLink() || st.size > 64 * 1024)
+  if (!st.isFile() || st.isSymbolicLink() || st.size > 8 * 1024 * 1024)
     throw Error("工作请求无效");
   const job = JSON.parse(await fs.readFile(request, "utf8"));
   if (
@@ -72,7 +73,7 @@ async function main() {
   try {
     const task = job.task;
     if (
-      !["check", "quark", "context"].includes(task.kind) ||
+      !["check", "quark", "context", "save"].includes(task.kind) ||
       !path.isAbsolute(task.cli || "") ||
       path.basename(task.cli) !== "quark-drive.cjs" ||
       !path.isAbsolute(task.root || "")
@@ -97,6 +98,11 @@ async function main() {
           task.args[1],
         );
       data = await q.run(task.args);
+    } else if (task.kind === "save") {
+      const value = await runSaveTask(task, { quark: q });
+      const saveResult = path.join(path.dirname(request), "save-result.json");
+      await atomicJSON(saveResult, value);
+      data = { saveResult };
     } else {
       if (!within(task.contextRoot, task.archive))
         throw Error("对话资料路径无效");

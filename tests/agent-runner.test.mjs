@@ -21,7 +21,7 @@ async function fakeRunner(mode) {
   const runner = new AgentRunner({
     binding,
     root,
-    timeout: 20,
+    timeout: mode === "hang" ? 20 : 2000,
     spawnProcess(cli, args, options) {
       const child = new EventEmitter();
       Object.assign(child, {
@@ -37,9 +37,21 @@ async function fakeRunner(mode) {
           await fs.readFile(path.join(options.cwd, "request.json"), "utf8"),
         );
         const nonce = mode === "wrong" ? "wrong" : request.nonce;
+        let data = { passed: true };
+        if (mode.startsWith("save")) {
+          const file = path.join(options.cwd, "save-result.json");
+          await fs.writeFile(
+            file,
+            JSON.stringify({ text: "x".repeat(9 * 1024 * 1024) }),
+          );
+          data = {
+            saveResult:
+              mode === "save-outside" ? path.join(root, "outside.json") : file,
+          };
+        }
         await fs.writeFile(
           request.output,
-          JSON.stringify({ nonce, ok: true, data: { passed: true } }),
+          JSON.stringify({ nonce, ok: true, data }),
         );
         const event =
           mode === "text"
@@ -92,5 +104,22 @@ test("取消不会执行新任务", async () => {
     assert.equal(runner.busy, false);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("批处理的大版本列表通过任务内文件交回，拒绝目录外结果并清理任务", async () => {
+  for (const mode of ["save", "save-outside"]) {
+    const { root, runner } = await fakeRunner(mode);
+    try {
+      if (mode === "save")
+        assert.equal(
+          (await runner.run({ kind: "save" })).text.length,
+          9 * 1024 * 1024,
+        );
+      else await assert.rejects(runner.run({ kind: "save" }), /结果路径/);
+      assert.deepEqual(await fs.readdir(path.join(root, "jobs")), []);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   }
 });

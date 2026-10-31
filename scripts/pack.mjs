@@ -30,6 +30,23 @@ for (const name of ["quark-drive.cjs", "hash-worker.cjs"])
     path.join(".runtime/quark/scripts", name),
     path.join(quarkResource, "scripts", name),
   );
+// External Node.js cannot load app.asar. Keep worker modules as ordinary files.
+const agentResource = path.resolve(".data/pack-resources/agent-runtime");
+if (path.dirname(agentResource) !== path.resolve(".data/pack-resources"))
+  throw Error("Unexpected Agent resource directory");
+await fs.rm(agentResource, { recursive: true, force: true });
+await fs.mkdir(path.join(agentResource, "src"), { recursive: true });
+await fs.mkdir(path.join(agentResource, "scripts"), { recursive: true });
+for (const name of await fs.readdir("src"))
+  if (name.endsWith(".mjs"))
+    await fs.copyFile(
+      path.join("src", name),
+      path.join(agentResource, "src", name),
+    );
+await fs.copyFile(
+  "scripts/continue-bound-agent.mjs",
+  path.join(agentResource, "scripts/continue-bound-agent.mjs"),
+);
 const result = await packager({
   dir: ".",
   name: "SpireSaveBridge",
@@ -39,7 +56,7 @@ const result = await packager({
   electronZipDir,
   out: "dist",
   overwrite: true,
-  extraResource: [quarkResource],
+  extraResource: [quarkResource, agentResource],
   ignore: [
     /^\/dist(?:\/|$)/,
     /^\/tests(?:\/|$)/,

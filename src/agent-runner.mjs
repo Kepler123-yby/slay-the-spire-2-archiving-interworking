@@ -182,6 +182,19 @@ export class AgentRunner {
       if (result.nonce !== nonce || typeof result.ok !== "boolean")
         throw Error("Agent 任务结果不匹配");
       if (!result.ok) throw Error(result.error || "Agent 工作程序失败");
+      if (task.kind === "save") {
+        const file = path.join(jobDir, "save-result.json");
+        if (result.data?.saveResult !== file)
+          throw Error("存档任务结果路径无效");
+        const stat = await fs.lstat(file);
+        if (
+          !stat.isFile() ||
+          stat.isSymbolicLink() ||
+          stat.size > 64 * 1024 * 1024
+        )
+          throw Error("存档任务结果无效或超过64MiB");
+        return JSON.parse(await fs.readFile(file, "utf8"));
+      }
       return result.data;
     } finally {
       this.busy = false;

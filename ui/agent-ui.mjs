@@ -130,5 +130,11 @@ export function initAgentUI({ call, onChange }) {
     get busy() {
       return state.busy;
     },
+    get blocksCloud() {
+      return state.busy && !state.background;
+    },
+    get background() {
+      return state.busy && state.background;
+    },
   };
 }

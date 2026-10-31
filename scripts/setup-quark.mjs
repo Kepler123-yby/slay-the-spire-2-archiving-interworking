@@ -22,8 +22,10 @@ if (process.platform === "win32")
     "powershell.exe",
     [
       "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
       "-Command",
-      "Expand-Archive -LiteralPath $env:SPIRE_QUARK_ZIP -DestinationPath $env:SPIRE_QUARK_DIR -Force",
+      "$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath $env:SPIRE_QUARK_ZIP -DestinationPath $env:SPIRE_QUARK_DIR -Force",
     ],
     { env: { ...process.env, SPIRE_QUARK_ZIP: zip, SPIRE_QUARK_DIR: root } },
   );

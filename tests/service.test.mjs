@@ -29,6 +29,44 @@ class FakeCloud {
     return fid;
   }
 }
+
+test("上传快照和完成标记延迟可见时等待发布，不重复上传", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "spire-publish-lag-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const p = {
+    account: "76561198000000000",
+    profile: "profile1",
+    group: "modded",
+    dir: path.join(root, "saves"),
+  };
+  await fs.mkdir(p.dir);
+  await fs.writeFile(path.join(p.dir, "progress.save"), "fixture");
+  const cloud = new FakeCloud(path.join(root, "cloud"));
+  const put = cloud.put.bind(cloud),
+    list = cloud.list.bind(cloud);
+  let hidden = null,
+    uploads = 0;
+  cloud.put = async (file, parent) => {
+    await put(file, parent);
+    hidden = path.basename(file);
+    uploads++;
+  };
+  cloud.list = async (fid) => {
+    const items = await list(fid);
+    if (!hidden) return items;
+    const name = hidden;
+    hidden = null;
+    return items.filter((x) => x.filename !== name);
+  };
+  const service = new Service({
+    quark: cloud,
+    stateDir: path.join(root, "state"),
+    checkGame: async () => {},
+  });
+  await service.upload(p);
+  assert.equal(uploads, 2);
+  assert.equal((await service.versions(p)).length, 1);
+});
 test("两个离线分支必须显示冲突", () => {
   const v = [
     { id: "a", parents: [] },

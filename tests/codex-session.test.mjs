@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 import { readCodexSession, codexCandidates } from "../src/codex-session.mjs";
 import {
   messageFromItem,
@@ -132,7 +133,7 @@ test("重复游标、丢失页及项目不匹配均失败，不交付部分成�
             async request(method) {
               if (method === "thread/read")
                 return failure === "project"
-                  ? { thread: { ...metadata.thread, cwd: "/tmp" } }
+                  ? { thread: { ...metadata.thread, cwd: path.dirname(process.cwd()) } }
                   : metadata;
               if (++pages > 1 && failure === "page") throw Error("分页断开");
               return { data: [user("message", "公开")], nextCursor: "same" };

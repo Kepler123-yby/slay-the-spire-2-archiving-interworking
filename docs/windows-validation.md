@@ -1,6 +1,42 @@
 # Windows 首次上传验证（原生 PowerShell）
 
-目标：验证同一个 Steam 账号在 Windows 上传所选 Mod 进度，随后由 Mac 接收。本流程以 Windows 为来源举例；工具允许任一端首次上传，由使用者决定方向。Windows 当前未经实机验证；任一步失败请停止在该步骤，不覆盖真实存档。
+目标：验证同一个 Steam 账号在 Windows 上传所选 Mod 进度，随后由 Mac 接收。本流程以 Windows 为来源举例；工具允许任一端首次上传，由使用者决定方向。Windows 原生基础链路已验证，真实存档的游戏内跨平台读回仍待验收；任一步失败请停止在该步骤，不覆盖真实存档。
+
+## 2026-10-31 原生实测记录
+
+环境：Windows 11 专业版 x64（10.0.26200）、Node.js 24.22.1、Electron 42.11.18、夸克官方组件 1.0.25、Codex CLI 0.166.0-alpha.5.1。
+
+| 检查 | 结果 |
+| --- | --- |
+| 官方组件下载与 SHA-256 | 通过；原生 PowerShell 解压，无需 WSL |
+| `npm.cmd test` | 51/51 通过，包含目录延迟可见的回归测试 |
+| `npm.cmd run test:ui` | 通过；版本选择、备份限额、绑定与错误处理均使用合成数据 |
+| `doctor` | 发现原版 102 个文件、Mod 129 个文件，各 5 个角色；游戏已退出 |
+| `resolve-agent` | 返回 `QK_AGENT_ID=codex` |
+| 官方授权与随机文件探针 | 通过；2048 字节上传、完整枚举、下载及 SHA-256 校验 |
+| `probe:roundtrip` | 通过；合成 Mod 进阶 6 上传、将本地 5 应用为 6、备份恢复为 5 |
+| 源码桌面冒烟 | `DESKTOP_CLOUD_PROBE_OK`、`DESKTOP_SMOKE_OK`；截图非空 |
+| Windows x64 打包与 EXE 本地冒烟 | 通过；输出 `dist/SpireSaveBridge-win32-x64/SpireSaveBridge.exe` |
+| 本地 Codex 接口与项目公开对话导出 | 初始化、模型查询、分页导出通过；仅本地导出，没有上传对话 |
+| 真实 Agent 后台工作任务 | 通过；返回 `agent: codex, verified: true`，使用本机实际代理 |
+
+本轮没有修改真实游戏存档。真实存档上传、Mac 游戏内读回、绑定后普通终端自动同步及取消操作仍需按下文验收。打包应用的授权目录独立，首次使用仍需在该应用内授权；源码授权不会被复制进构建。
+
+本机无 npm，验证时从 Node 官方下载了含 npm 的便携版到 `.runtime/node-v24.22.1-win-x64`，核对官方 SHASUMS256 后使用。当前机器重跑可先执行：
+
+```powershell
+$env:Path = (Join-Path $PWD '.runtime/node-v24.22.1-win-x64') + ';' + $env:Path
+```
+
+修复与环境观察：
+
+- 安装脚本的子 PowerShell 使用进程级 `-ExecutionPolicy Bypass` 解压，不改系统执行策略。
+- 路径函数明确使用目标平台的路径规则；测试不再假定 `/tmp` 存在。
+- 当前设备的截图会间歇返回 `UnknownVizError`，软件渲染不能彻底消除。界面测试默认只验证交互断言；需要导出截图时设置 `$env:SPIRE_UI_SCREENSHOTS = '1'`，此时截图失败仍会使测试失败。冒烟测试使用隐藏窗口和软件渲染，保留截图非空检查；本轮已取得并人工检查有效截图。普通应用保持原启动方式。
+- 上传成功后目录可能短暂为空；探针最多枚举 6 次，间隔 1 秒，目标文件可见后仍须下载校验。
+- CLI 已登录但直连后台任务超时；绑定面板填写本机现有 HTTP 代理后真实任务通过。代理地址留在本机，不要求其他设备使用相同端口。
+- Node 直连 GitHub 下载超时，Electron 通过镜像安装并按 npm 包内校验值验证；官方 release 压缩包亦已下载并校验。打包可用 `$env:ELECTRON_ZIP_DIR = (Resolve-Path .runtime).Path` 复用本机缓存。
+- 当前 `godot.log` 超过既有 8 MiB 读取上限，因此 Mod 数与游戏版本显示未记录；没有修改游戏日志。
 
 ## 准备
 
@@ -17,7 +53,7 @@
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows-validate.ps1
 ```
 
-脚本安装项目依赖与固定版本官方组件，运行合成存档测试和只读路径检查；不上传、修改真实存档，不读取凭据。预期：测试全部通过，doctor 显示账号档位摘要且游戏已退出。
+脚本安装项目依赖与固定版本官方组件，运行合成存档、界面测试和只读路径检查；不上传、修改真实存档，不读取凭据。预期：测试全部通过，doctor 显示账号档位摘要且游戏已退出。
 
 若 PowerShell 禁止脚本，也可逐条运行：
 
@@ -26,6 +62,7 @@ node --version
 npm.cmd ci
 npm.cmd run setup:quark
 npm.cmd test
+npm.cmd run test:ui
 npm.cmd run doctor
 npm.cmd run agent:check
 npm.cmd start

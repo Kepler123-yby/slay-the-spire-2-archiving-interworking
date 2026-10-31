@@ -13,8 +13,14 @@ export async function probe(q, root) {
   await fs.mkdir(root, { recursive: true });
   await fs.writeFile(file, data);
   await q.put(file, dir);
-  const items = await q.list(dir);
-  const item = items.find((x) => x.filename === name);
+  // Quark may acknowledge an upload before it is visible in directory listings.
+  let item;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    if (attempt) await new Promise((resolve) => setTimeout(resolve, 1000));
+    const items = await q.list(dir);
+    item = items.find((x) => x.filename === name);
+    if (item) break;
+  }
   if (!item) throw Error("上传后未能枚举测试文件");
   const downloaded = await q.get(item.fid);
   if (digest(await fs.readFile(downloaded)) !== digest(data))

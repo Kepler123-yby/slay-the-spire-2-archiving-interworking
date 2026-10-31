@@ -10,7 +10,7 @@ export function saveRoot(
   appdata = process.env.APPDATA,
 ) {
   if (platform === "darwin")
-    return path.join(
+    return path.posix.join(
       home,
       "Library",
       "Application Support",
@@ -19,7 +19,7 @@ export function saveRoot(
     );
   if (platform === "win32") {
     if (!appdata) throw Error("APPDATA 未设置");
-    return path.join(appdata, "SlayTheSpire2", "steam");
+    return path.win32.join(appdata, "SlayTheSpire2", "steam");
   }
   throw Error("仅支持 macOS 与 Windows");
 }

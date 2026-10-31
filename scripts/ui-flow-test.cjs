@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const assert = require("node:assert/strict");
+app.disableHardwareAcceleration();
 app.setPath("userData", path.resolve(".data/ui-flow-test"));
 app.whenReady().then(async () => {
   const calls = [];
@@ -17,6 +18,8 @@ app.whenReady().then(async () => {
     messages: 0,
   };
   let rejectBinding = true;
+  let rejectVersions = false;
+  let rejectUpload = false;
   const ids = [
     "11111111-1111-4111-8111-111111111111",
     "22222222-2222-4222-8222-222222222222",
@@ -94,6 +97,12 @@ app.whenReady().then(async () => {
           summary,
         })),
       };
+    if (action === "upload")
+      return rejectUpload
+        ? { ok: false, error: "测试上传失败" }
+        : { ok: true, data: "上传完成，云端回读校验通过" };
+    if (action === "versions" && rejectVersions)
+      return { ok: false, error: "测试版本查询失败" };
     if (action === "versions")
       return {
         ok: true,
@@ -160,14 +169,80 @@ app.whenReady().then(async () => {
         "document.getElementById('selectedVersion').textContent.includes('22222222')",
       ),
     );
+    const versionCalls = calls.filter((c) => c.action === "versions").length;
+    await evaluate(
+      "document.getElementById('ready').checked=true;document.getElementById('upload').click()",
+    );
+    await waitFor(
+      "document.getElementById('cloudVersion').options.length===3 && !document.getElementById('upload').disabled",
+    );
+    assert.equal(
+      calls.filter((c) => c.action === "versions").length,
+      versionCalls + 1,
+    );
+    assert.equal(
+      await evaluate("document.getElementById('cloudVersion').disabled"),
+      false,
+    );
+    assert.equal(
+      await evaluate("document.getElementById('cloudVersion').value"),
+      "",
+    );
+    assert.equal(
+      await evaluate("document.getElementById('overwrite').disabled"),
+      true,
+    );
+    assert.equal(calls.filter((c) => c.action === "download").length, 0);
+    assert.ok(
+      await evaluate(
+        "document.getElementById('status').textContent.includes('上传完成')",
+      ),
+    );
+    rejectVersions = true;
+    await evaluate("document.getElementById('upload').click()");
+    await waitFor(
+      "document.getElementById('status').textContent.includes('测试版本查询失败') && !document.getElementById('upload').disabled",
+    );
+    assert.ok(
+      await evaluate(
+        "document.getElementById('status').textContent.includes('上传完成')",
+      ),
+    );
+    assert.equal(
+      await evaluate("document.getElementById('overwrite').disabled"),
+      true,
+    );
+    rejectVersions = false;
+    rejectUpload = true;
+    const beforeFailedUpload = calls.filter(
+      (c) => c.action === "versions",
+    ).length;
+    await evaluate("document.getElementById('upload').click()");
+    await waitFor(
+      "document.getElementById('status').textContent.includes('测试上传失败') && !document.getElementById('upload').disabled",
+    );
+    assert.equal(
+      await evaluate(
+        "(()=>{const r=document.getElementById('status').getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight})()",
+      ),
+      true,
+    );
+    assert.equal(
+      calls.filter((c) => c.action === "versions").length,
+      beforeFailedUpload,
+    );
+    rejectUpload = false;
+    await evaluate("document.getElementById('refresh').click()");
+    await waitFor("document.getElementById('cloudVersion').options.length===3");
     await evaluate(
       "document.getElementById('cloudVersion').scrollIntoView({block:'center'})",
     );
     await fs.mkdir(path.resolve(".data"), { recursive: true });
-    await fs.writeFile(
-      path.resolve(".data/ui-flow-preview.png"),
-      (await win.webContents.capturePage()).toPNG(),
-    );
+    if (process.env.SPIRE_UI_SCREENSHOTS === "1")
+      await fs.writeFile(
+        path.resolve(".data/ui-flow-preview.png"),
+        (await win.webContents.capturePage()).toPNG(),
+      );
     await evaluate(
       "document.getElementById('profiles').value='test-profile2';document.getElementById('profiles').dispatchEvent(new Event('change'))",
     );
@@ -232,10 +307,11 @@ app.whenReady().then(async () => {
     await evaluate(
       "document.getElementById('backups').closest('details').open=true;document.getElementById('backups').scrollIntoView({block:'center'})",
     );
-    await fs.writeFile(
-      path.resolve(".data/ui-backup-management-preview.png"),
-      (await win.webContents.capturePage()).toPNG(),
-    );
+    if (process.env.SPIRE_UI_SCREENSHOTS === "1")
+      await fs.writeFile(
+        path.resolve(".data/ui-backup-management-preview.png"),
+        (await win.webContents.capturePage()).toPNG(),
+      );
     await evaluate(
       "document.getElementById('agentPanel').open=true;document.getElementById('agentPreview').click()",
     );
@@ -274,13 +350,59 @@ app.whenReady().then(async () => {
     await evaluate(
       "document.getElementById('agentPanel').scrollIntoView({block:'center'})",
     );
-    await fs.writeFile(
-      path.resolve(".data/ui-agent-binding-preview.png"),
-      (await win.webContents.capturePage()).toPNG(),
-    );
+    if (process.env.SPIRE_UI_SCREENSHOTS === "1")
+      await fs.writeFile(
+        path.resolve(".data/ui-agent-binding-preview.png"),
+        (await win.webContents.capturePage()).toPNG(),
+      );
     await evaluate("document.getElementById('agentUnbind').click()");
     await waitFor("!document.getElementById('agentPreview').disabled");
     assert.equal(agentState.bound, false);
+    agentState = {
+      ...agentState,
+      bound: true,
+      busy: true,
+      background: true,
+      stage: "通过真实Agent同步项目对话",
+    };
+    await waitFor(
+      "document.getElementById('agentState').textContent.includes('通过真实Agent同步项目对话')",
+    );
+    assert.equal(
+      await evaluate("document.getElementById('upload').disabled"),
+      false,
+    );
+    assert.equal(
+      await evaluate("document.getElementById('refresh').disabled"),
+      false,
+    );
+    assert.equal(
+      await evaluate("document.getElementById('contextSync').disabled"),
+      true,
+    );
+    assert.ok(
+      await evaluate(
+        "document.getElementById('cloudTaskHint').textContent.includes('优先')",
+      ),
+    );
+    const beforePriorityUpload = calls.filter(
+      (c) => c.action === "upload",
+    ).length;
+    await evaluate("document.getElementById('upload').click()");
+    await waitFor(
+      "document.getElementById('status').textContent.includes('上传完成') && !document.getElementById('upload').disabled",
+    );
+    assert.equal(
+      calls.filter((c) => c.action === "upload").length,
+      beforePriorityUpload + 1,
+    );
+    agentState = {
+      ...agentState,
+      busy: false,
+      background: false,
+      bound: false,
+      stage: "未绑定",
+    };
     console.log(
       "UI_FLOW_OK: 显式选择、备份限额、Agent 预览、失败不绑定、同步失败保留待办和离线功能、解除绑定；仅合成数据。",
     );

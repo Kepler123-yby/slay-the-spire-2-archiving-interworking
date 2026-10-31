@@ -24,5 +24,10 @@ test("平台路径独立解析", () => {
     saveRoot("darwin", "/Users/test"),
     "/Users/test/Library/Application Support/SlayTheSpire2/steam",
   );
+  assert.equal(
+    saveRoot("win32", "C:\\Users\\test", "C:\\Users\\test\\AppData\\Roaming"),
+    "C:\\Users\\test\\AppData\\Roaming\\SlayTheSpire2\\steam",
+  );
+  assert.throws(() => saveRoot("win32", "C:\\Users\\test", ""), /APPDATA/);
   assert.throws(() => saveRoot("linux"));
 });

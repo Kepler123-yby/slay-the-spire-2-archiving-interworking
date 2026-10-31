@@ -9,10 +9,12 @@ let backupItems = [],
   backupCount = null;
 const selection = new VersionSelection();
 let agentUI;
+let currentAction = "";
 const scope = () => key() + "|" + $("group").value;
 function status(text, error = false) {
   $("status").textContent = text;
   $("status").classList.toggle("error", error);
+  if (error) $("status").scrollIntoView({ block: "nearest" });
 }
 function key() {
   return $("profiles").value;
@@ -37,17 +39,29 @@ function buttons() {
       record.group !== $("group").value;
   });
   $("upload").disabled =
-    busy || agentUI?.busy || !profiles.find((p) => p.key === key());
+    busy || agentUI?.blocksCloud || !profiles.find((p) => p.key === key());
   for (const id of ["refresh", "login", "probe"])
-    $(id).disabled = busy || agentUI?.busy;
+    $(id).disabled = busy || agentUI?.blocksCloud;
   $("cloudVersion").disabled = busy || !selection.versions.length;
   $("overwrite").disabled =
-    busy || agentUI?.busy || full || !selection.selected(scope());
+    busy || agentUI?.blocksCloud || full || !selection.selected(scope());
+  $("cloudTaskHint").textContent = !profiles.find((p) => p.key === key())
+    ? "请先选择有效的 Steam 档位。"
+    : busy
+      ? currentAction === "upload"
+        ? "正在上传并校验，请等待完成。"
+        : "正在处理当前操作，请稍候。"
+      : agentUI?.blocksCloud
+        ? "请先完成或取消当前 Agent 配置操作。"
+        : agentUI?.background
+          ? "项目对话正在后台同步；上传和刷新将优先处理。"
+          : "可上传当前档位的进度。";
   agentUI?.renderButtons(busy);
 }
 async function call(action, args = {}) {
   if (busy) return;
   busy = true;
+  currentAction = action;
   buttons();
   status("正在处理，请稍候…");
   try {
@@ -67,6 +81,7 @@ async function call(action, args = {}) {
     status(e.message, true);
   } finally {
     busy = false;
+    currentAction = "";
     buttons();
   }
 }
@@ -231,10 +246,10 @@ $("login").onclick = () => call("login");
 $("probe").onclick = () => call("probe");
 $("backup").onclick = () => mutate("backup");
 $("upload").onclick = () => mutate("upload");
-$("refresh").onclick = async () => {
+async function refreshCloud() {
   clearCloud("正在刷新云端版本…");
   const versions = await call("versions");
-  if (!versions) return;
+  if (!versions) return false;
   selection.replace(scope(), versions);
   $("cloudVersion").replaceChildren(
     text("option", "请选择一个版本（不会自动覆盖）"),
@@ -285,7 +300,9 @@ $("refresh").onclick = async () => {
     row.append(info, button);
     $("versions").append(row);
   }
-};
+  return true;
+}
+$("refresh").onclick = refreshCloud;
 $("listBackups").onclick = refreshBackups;
 async function mutate(action, args) {
   const result = await call(action, args);
@@ -293,7 +310,18 @@ async function mutate(action, args) {
     const message = $("status").textContent;
     if (action === "backup" || action === "deleteBackup")
       await refreshBackups();
-    else await init();
+    else {
+      await init();
+      if (action === "upload" && !(await refreshCloud())) {
+        status(
+          message +
+            "\n上传已完成，但刷新云端版本失败：" +
+            $("status").textContent,
+          true,
+        );
+        return;
+      }
+    }
     status(message);
   }
 }

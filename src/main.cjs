@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, clipboard } = require("electron");
 const path = require("node:path");
+if (process.env.SPIRE_SMOKE === "1") app.disableHardwareAcceleration();
 const userDataPath =
   process.env.SPIRE_SMOKE === "1"
     ? path.resolve(".data/smoke")
@@ -77,9 +78,16 @@ if (!app.requestSingleInstanceLock()) {
       projectDir: process.cwd(),
       quark: q,
       allowedRoots: [stateDir, userDataPath],
+      worker: app.isPackaged
+        ? path.join(process.resourcesPath, "agent-runtime", "src", "agent-worker.mjs")
+        : undefined,
+      continueScript: app.isPackaged
+        ? path.join(process.resourcesPath, "agent-runtime", "scripts", "continue-bound-agent.mjs")
+        : undefined,
     });
     await agents.init();
     const win = new BrowserWindow({
+      show: process.env.SPIRE_SMOKE !== "1",
       width: 1080,
       height: 780,
       minWidth: 840,
@@ -96,6 +104,7 @@ if (!app.requestSingleInstanceLock()) {
     win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     win.webContents.on("will-navigate", (e) => e.preventDefault());
     ipcMain.handle("bridge", async (event, action, args = {}) => {
+      let releasePriority;
       if (
         event.sender !== win.webContents ||
         event.senderFrame !== win.webContents.mainFrame
@@ -179,13 +188,8 @@ if (!app.requestSingleInstanceLock()) {
           } else data = await agents.sync();
           return { ok: true, data };
         }
-        if (
-          ["login", "probe", "versions", "upload", "download"].includes(
-            action,
-          ) &&
-          (agents.busy || agents.runner?.busy)
-        )
-          throw Error("项目对话正在同步，请稍候；本地功能仍可使用");
+        if (["login", "probe", "versions", "upload", "download"].includes(action))
+          releasePriority = await agents.prioritizeSave();
         const profiles = await discover();
         const source = profiles.find(
           (p) => p.account + "-" + p.profile + "-" + p.layout === args.key,
@@ -237,7 +241,10 @@ if (!app.requestSingleInstanceLock()) {
               }),
             });
           }
-        } else if (action === "login") data = await q.login();
+        } else if (action === "login") {
+          service.clearCloudCache();
+          data = await q.login();
+        }
         else if (action === "probe")
           data = await service.exclusive(() =>
             probe(q, path.join(stateDir, "probe")),
@@ -298,12 +305,14 @@ if (!app.requestSingleInstanceLock()) {
         return { ok: true, data, notices: notices.splice(0) };
       } catch (e) {
         return { ok: false, error: e.message, notices: notices.splice(0) };
+      } finally {
+        releasePriority?.();
       }
     });
     await win.loadFile(path.join(__dirname, "../ui/index.html"));
     if (process.env.SPIRE_SMOKE !== "1") {
       const startupSync = agents.binding
-        ? agents.sync()
+        ? agents.sync({ background: true })
         : Promise.resolve(null);
       startupSync.catch(() => {});
       const timer = setInterval(() => {
@@ -313,12 +322,31 @@ if (!app.requestSingleInstanceLock()) {
           !agents.runner?.busy &&
           !service.busy
         )
-          agents.sync({ onlyChanged: true }).catch(() => {});
+          agents.sync({ onlyChanged: true, background: true }).catch(() => {});
       }, 60000);
       app.on("before-quit", () => {
         clearInterval(timer);
         agents.stop();
       });
+      if (process.env.SPIRE_PRIORITY_SMOKE === "1") {
+        let ready = false;
+        for (let attempt = 0; attempt < 100; attempt++) {
+          ready = await win.webContents.executeJavaScript(
+            "document.getElementById('profiles').options.length > 0 && !document.getElementById('upload').disabled && document.getElementById('cloudTaskHint').textContent.includes('优先')",
+          );
+          if (ready) break;
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        if (!ready) throw Error("后台对话同步期间上传按钮未就绪");
+        console.log("BACKGROUND_UPLOAD_AVAILABLE=true");
+        const refreshed = await win.webContents.executeJavaScript(
+          "document.getElementById('refresh').onclick()",
+        );
+        if (refreshed !== true || agents.foregroundRequests !== 0)
+          throw Error("手动刷新未优先完成或任务占用未释放");
+        console.log("CLOUD_PRIORITY_SMOKE_OK");
+        app.quit();
+      }
       if (process.env.SPIRE_AGENT_SMOKE === "1") {
         try {
           const result = await startupSync;
@@ -360,10 +388,14 @@ if (!app.requestSingleInstanceLock()) {
         console.log("DESKTOP_CLOUD_PROBE_OK");
       }
       const image = await win.webContents.capturePage();
+      if (image.isEmpty()) throw Error("桌面截图为空");
       await fs.writeFile(path.join(stateDir, "screenshot.png"), image.toPNG());
       console.log("DESKTOP_SMOKE_OK");
       app.quit();
     }
+  }).catch((error) => {
+    console.error(error);
+    app.exit(1);
   });
   app.on("window-all-closed", () => app.quit());
 }

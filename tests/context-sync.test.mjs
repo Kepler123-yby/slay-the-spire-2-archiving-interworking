@@ -102,3 +102,38 @@ test("发布失败保留待办，坏哈希不改写成功记录", async () => {
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("新对话及完成标记延迟可见时等待枚举，不重复上传且仍回读校验", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "spire-context-lag-"));
+  const q = new MemoryQuark(root);
+  const put = q.put.bind(q),
+    list = q.list.bind(q);
+  let hidden = null,
+    misses = 0;
+  q.put = async (file, parent) => {
+    await put(file, parent);
+    hidden = path.basename(file);
+  };
+  q.list = async (parent) => {
+    const items = await list(parent);
+    if (!hidden) return items;
+    const skip = hidden;
+    hidden = null;
+    misses++;
+    return items.filter((item) => item.filename !== skip);
+  };
+  try {
+    const sync = new ContextSync({ quark: q, root: path.join(root, "local") });
+    const result = await sync.sync(archive("A"));
+    assert.equal(result.messages, 1);
+    assert.equal(result.uploaded, true);
+    assert.equal(q.uploads, 2);
+    assert.equal(misses, 2);
+    assert.equal(
+      (await sync.read("sync-state.json")).revision,
+      result.revision,
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

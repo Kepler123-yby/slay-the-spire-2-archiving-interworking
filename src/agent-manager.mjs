@@ -22,14 +22,25 @@ export class AgentManager {
     makeRPC = (cli, options) => new CodexRPC(cli, options),
     execLogin = promisify(execFile),
     findCLIs = codexCandidates,
+    worker,
+    continueScript,
   }) {
-    Object.assign(this, { root, projectDir, quark, allowedRoots });
+    Object.assign(this, {
+      root,
+      projectDir,
+      quark,
+      allowedRoots,
+      worker,
+      continueScript,
+    });
     this.store = new BindingStore(root);
     this.contextRoot = path.join(root, "context");
     this.busy = false;
     this.error = "";
     this.stage = "未绑定";
     this.attemptedHash = null;
+    this.backgroundSync = null;
+    this.foregroundRequests = 0;
     Object.assign(this, { readSession, makeRPC, execLogin, findCLIs });
   }
   begin(stage) {
@@ -54,6 +65,7 @@ export class AgentManager {
   attach() {
     this.runner = new AgentRunner({
       binding: this.binding,
+      worker: this.worker,
       root: this.root,
       allowedRoots: [
         ...this.allowedRoots,
@@ -68,6 +80,14 @@ export class AgentManager {
         root: this.quark.workDir,
         allowedFilesRoot: this.allowedRoots[0],
         args,
+      });
+    this.quark.saveExecutor = (operation) =>
+      this.runner.run({
+        ...operation,
+        kind: "save",
+        cli: this.quark.cli,
+        root: this.quark.workDir,
+        allowedStateRoot: this.allowedRoots[0],
       });
     this.stage = "已绑定，等待同步";
   }
@@ -221,6 +241,7 @@ export class AgentManager {
       const p = this.pending;
       const runner = new AgentRunner({
         binding: p.binding,
+        worker: this.worker,
         root: this.root,
         allowedRoots: [
           this.root,
@@ -251,7 +272,44 @@ export class AgentManager {
     }
     return this.sync();
   }
-  async sync({ onlyChanged = false } = {}) {
+  sync(options = {}) {
+    if (!options.background) return this.syncContext(options);
+    if (this.foregroundRequests) return Promise.resolve({ deferred: true });
+    if (this.backgroundSync) return this.backgroundSync.promise;
+    const job = { interrupted: false };
+    const promise = this.syncContext({ ...options, backgroundJob: job });
+    job.promise = promise;
+    this.backgroundSync = job;
+    const clear = () => {
+      if (this.backgroundSync === job) this.backgroundSync = null;
+    };
+    promise.then(clear, clear);
+    return promise;
+  }
+  async prioritizeSave() {
+    this.foregroundRequests++;
+    try {
+      if (this.backgroundSync) {
+        const job = this.backgroundSync;
+        job.interrupted = true;
+        this.stop();
+        await job.promise.catch(() => {});
+      }
+      if (this.busy || this.runner?.busy)
+        throw Error("请等待当前 Agent 操作完成");
+      let released = false;
+      return () => {
+        if (!released) {
+          released = true;
+          this.foregroundRequests--;
+        }
+      };
+    } catch (error) {
+      this.foregroundRequests--;
+      throw error;
+    }
+  }
+  async syncContext({ onlyChanged = false, backgroundJob = null } = {}) {
     if (!this.binding) throw Error("请先绑定 Agent 与项目会话");
     if (this.busy || this.runner?.busy)
       throw Error("已有 Agent 任务运行，请稍候");
@@ -300,6 +358,12 @@ export class AgentManager {
       this.stage = "项目对话已同步";
       return result;
     } catch (e) {
+      if (backgroundJob?.interrupted) {
+        this.attemptedHash = null;
+        this.stage = "对话同步已暂停，存档任务优先；稍后自动继续";
+        this.error = previousError;
+        return { deferred: true };
+      }
       this.error = e.message;
       this.stage = "云端未就绪，待同步内容保留";
       throw e;
@@ -341,6 +405,7 @@ export class AgentManager {
       model: this.binding?.model || "",
       stage: this.stage,
       busy: this.busy || !!this.runner?.busy,
+      background: !!this.backgroundSync,
       error: this.error,
       messages,
       pending,
@@ -370,6 +435,7 @@ export class AgentManager {
     this.binding = null;
     this.runner = null;
     this.quark.executor = null;
+    this.quark.saveExecutor = null;
     this.pending = null;
     this.stage = "未绑定";
     this.error = "";
@@ -385,9 +451,10 @@ export class AgentManager {
       process.platform === "win32" ? "&" : "",
       quote(this.binding.node),
       quote(
-        fileURLToPath(
-          new URL("../scripts/continue-bound-agent.mjs", import.meta.url),
-        ),
+        this.continueScript ||
+          fileURLToPath(
+            new URL("../scripts/continue-bound-agent.mjs", import.meta.url),
+          ),
       ),
       "--binding",
       quote(this.store.file),

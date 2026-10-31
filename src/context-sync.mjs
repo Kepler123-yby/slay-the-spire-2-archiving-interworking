@@ -30,6 +30,17 @@ export class ContextSync {
       throw Error("云端项目对话文件超限");
     return fs.readFile(file);
   }
+  async waitForUploaded(parent, filename) {
+    // An acknowledged upload may not appear in the next Quark listing yet.
+    for (let attempt = 0; attempt < 6; attempt++) {
+      if (attempt) await new Promise((resolve) => setTimeout(resolve, 1000));
+      const item = (await this.quark.list(parent)).find(
+        (x) => x.filename === filename,
+      );
+      if (item) return item;
+    }
+    return null;
+  }
   async sync(local) {
     validateDialogue(local);
     const previous = await this.read("merged.json");
@@ -90,8 +101,7 @@ export class ContextSync {
       const bytes = await fs.readFile(payload),
         payloadHash = digest(bytes);
       await this.quark.put(payload, fid);
-      let list = await this.quark.list(fid);
-      const remote = list.find((x) => x.filename === path.basename(payload));
+      const remote = await this.waitForUploaded(fid, path.basename(payload));
       if (
         !remote ||
         digest(await this.downloaded(remote.fid, CONTEXT_LIMIT)) !== payloadHash
@@ -105,8 +115,7 @@ export class ContextSync {
         hash: payloadHash,
       });
       await this.quark.put(ready, fid);
-      list = await this.quark.list(fid);
-      const published = list.find((x) => x.filename === path.basename(ready));
+      const published = await this.waitForUploaded(fid, path.basename(ready));
       if (
         !published ||
         digest(await this.downloaded(published.fid, 64 * 1024)) !==
