@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
+import { summarize } from "./summary.mjs";
 export const LIMIT = 64 * 1024 * 1024;
 export const digest = (x) => createHash("sha256").update(x).digest("hex");
 const idPattern = /^[a-f0-9-]{36}$/;
@@ -139,7 +140,7 @@ export async function load(file) {
     throw Error("快照文件过大或类型无效");
   return validate(JSON.parse(await fs.readFile(file, "utf8")));
 }
-export async function capture(dir, identity, parents = []) {
+export async function capture(dir, identity, parents = [], environment = null) {
   const files = await readFiles(dir);
   const again = await readFiles(dir);
   if (contentHash(files) !== contentHash(again))
@@ -149,9 +150,12 @@ export async function capture(dir, identity, parents = []) {
     const d = JSON.parse(
       Buffer.from(files.find((f) => f.path === "progress.save").data, "base64"),
     );
-    const c = d.character_stats?.find?.((x) => x.id === "CHARACTER.DEFECT");
-    if (c)
-      summary = { defectAscension: c.max_ascension, defectWins: c.total_wins };
+    summary = summarize(d, {
+      environment,
+      modifiedAt: (
+        await fs.stat(path.join(dir, "progress.save"))
+      ).mtime.toISOString(),
+    });
   } catch {}
   return validate({
     summary,

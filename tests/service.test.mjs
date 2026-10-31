@@ -53,7 +53,6 @@ test("云端端到端模拟：上传、回读、应用、备份恢复，半成�
   const s = new Service({
     quark: new FakeCloud(path.join(root, "cloud")),
     stateDir: path.join(root, "state"),
-    allowInitialUpload: true,
     checkGame: async () => {},
   });
   await s.upload(p);
@@ -83,33 +82,26 @@ test("游戏运行时禁止备份和传输", async () => {
   await assert.rejects(s.backup({}), /游戏仍运行/);
   await assert.rejects(s.upload({}), /游戏仍运行/);
 });
-test("Mac首次上传锁定且未调用云端", async (t) => {
+test("未同步过的本机可直接上传，由用户决定来源", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "spire-first-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
-  const dir = path.join(root, "saves");
-  await fs.mkdir(dir);
-  await fs.writeFile(path.join(dir, "progress.save"), "old");
-  let called = false;
+  const p = {
+    account: "76561198000000000",
+    profile: "profile1",
+    group: "modded",
+    dir: path.join(root, "saves"),
+  };
+  await fs.mkdir(p.dir);
+  await fs.writeFile(path.join(p.dir, "progress.save"), "first");
   const service = new Service({
-    quark: {
-      mkdir: () => {
-        called = true;
-      },
-    },
+    quark: new FakeCloud(path.join(root, "cloud")),
     stateDir: path.join(root, "state"),
-    allowInitialUpload: false,
     checkGame: async () => {},
+    getEnvironment: async () => null,
   });
-  await assert.rejects(
-    service.upload({
-      account: "76561198000000000",
-      profile: "profile1",
-      group: "modded",
-      dir,
-    }),
-    /首次接入/,
-  );
-  assert.equal(called, false);
+  assert.equal(await service.base(p), null);
+  await service.upload(p);
+  assert.equal((await service.versions(p)).length, 1);
 });
 test("原版与Mod云端目录和备份空间隔离", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "spire-group-"));
@@ -125,4 +117,54 @@ test("原版与Mod云端目录和备份空间隔离", async (t) => {
   };
   assert.notEqual(await s.folder(p), await s.folder({ ...p, group: "modded" }));
   assert.notEqual(s.scope(p), s.scope({ ...p, group: "modded" }));
+});
+test("云端版本保留完整角色战绩及上传时Mod环境", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "spire-cloud-summary-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const p = {
+    account: "76561198000000000",
+    profile: "profile1",
+    group: "modded",
+    dir: path.join(root, "saves"),
+  };
+  await fs.mkdir(p.dir);
+  await fs.writeFile(
+    path.join(p.dir, "progress.save"),
+    JSON.stringify({
+      character_stats: [
+        {
+          id: "CHARACTER.IRONCLAD",
+          total_wins: 2,
+          total_losses: 3,
+          max_ascension: 4,
+        },
+        {
+          id: "CHARACTER.DEFECT",
+          total_wins: 7,
+          total_losses: 1,
+          max_ascension: 6,
+        },
+      ],
+    }),
+  );
+  const environment = {
+    gameVersion: "v-test",
+    mods: {
+      loaded: 2,
+      detected: 3,
+      source: "last-game-session",
+      observedAt: "2026-10-31T00:00:00Z",
+    },
+  };
+  const service = new Service({
+    quark: new FakeCloud(path.join(root, "cloud")),
+    stateDir: path.join(root, "state"),
+    checkGame: async () => {},
+    getEnvironment: async () => environment,
+  });
+  await service.upload(p);
+  const [v] = await service.versions(p);
+  assert.equal(v.summary.characters.length, 2);
+  assert.equal(v.summary.wins, 9);
+  assert.deepEqual(v.summary.environment, environment);
 });

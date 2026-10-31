@@ -1,5 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("node:path");
+if (process.env.SPIRE_SMOKE === "1")
+  app.setPath("userData", path.resolve(".data/smoke"));
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -10,12 +12,16 @@ if (!app.requestSingleInstanceLock()) {
       { discover, assertGameClosed },
       { readFiles, contentHash, recover },
       { probe },
+      { summarize },
+      { readEnvironment },
     ] = await Promise.all([
       import("./quark.mjs"),
       import("./service.mjs"),
       import("./platform.mjs"),
       import("./snapshot.mjs"),
       import("../scripts/cloud-probe.mjs"),
+      import("./summary.mjs"),
+      import("./environment.mjs"),
     ]);
     const fs = require("node:fs/promises");
     const stateDir = app.isPackaged
@@ -77,6 +83,7 @@ if (!app.requestSingleInstanceLock()) {
         let data;
         if (action === "status") {
           data = [];
+          const environment = await readEnvironment();
           for (const source of profiles) {
             const p = {
               ...source,
@@ -93,10 +100,6 @@ if (!app.requestSingleInstanceLock()) {
                 "base64",
               ),
             );
-            const d = progress.character_stats?.find?.(
-              (c) => c.id === "CHARACTER.DEFECT",
-            );
-            const base = await service.base(p);
             data.push({
               key: p.account + "-" + p.profile + "-" + p.layout,
               layout: p.layout,
@@ -104,10 +107,12 @@ if (!app.requestSingleInstanceLock()) {
               account: p.account,
               files: files.length,
               hash: contentHash(files),
-              defect: d
-                ? { ascension: d.max_ascension, wins: d.total_wins }
-                : null,
-              canUpload: !!base || process.platform === "win32",
+              summary: summarize(progress, {
+                environment,
+                modifiedAt: (
+                  await fs.stat(path.join(p.dir, "progress.save"))
+                ).mtime.toISOString(),
+              }),
             });
           }
         } else if (action === "login") data = await q.login();
@@ -132,7 +137,7 @@ if (!app.requestSingleInstanceLock()) {
             message:
               action === "upload" ? "上传当前本机进度？" : "应用所选进度？",
             detail:
-              "Mac 首次以 Windows 最新进度为准。应用前会备份本机存档；原版和 Mod 不会自动混用。",
+              "由你决定上传或应用哪份进度。上传会保留为独立版本；应用前会备份本机存档。",
           });
           if (result.response !== 1) throw Error("操作已取消");
           data =
@@ -150,10 +155,17 @@ if (!app.requestSingleInstanceLock()) {
     await win.loadFile(path.join(__dirname, "../ui/index.html"));
     if (process.env.SPIRE_SMOKE === "1") {
       await new Promise((r) => setTimeout(r, 1200));
-      const locked = await win.webContents.executeJavaScript(
+      const disabled = await win.webContents.executeJavaScript(
         "document.getElementById('upload').disabled",
       );
-      console.log("MAC_INITIAL_UPLOAD_LOCKED=" + locked);
+      if (disabled) throw Error("空闲时上传按钮不应按平台锁定");
+      console.log("UPLOAD_AVAILABLE=true");
+      const overview = await win.webContents.executeJavaScript(
+        "({ rows: document.querySelectorAll('#overview tbody tr').length, text: document.getElementById('local').textContent })",
+      );
+      if (!overview.rows || !overview.text.includes("Mod"))
+        throw Error("角色战绩或 Mod 摘要未显示");
+      console.log("PROFILE_SUMMARY_OK: " + overview.rows + " characters");
       if (process.env.SPIRE_CLOUD_SMOKE === "1") {
         const r = await win.webContents.executeJavaScript(
           "window.bridge.call('probe')",

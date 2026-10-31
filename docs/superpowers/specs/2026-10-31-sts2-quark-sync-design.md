@@ -104,4 +104,8 @@ Windows 候选路径为 `%APPDATA%/SlayTheSpire2/steam/<账号>/`，需要 Windo
 
 ## 实施中确认与首轮边界
 
-用户确认 Windows 进度更新、两端同账号且 Windows 使用 Mod；初次以 Windows 为来源，Mac 未接收前锁定上传。用户同意找不到新版 Steam 缓存时继续开发，之后从 Windows 上传夸克。首轮使用 JavaScript ES modules + Electron，容器采用有界 JSON/base64，原版与 Mod 逻辑分组；未知游戏布局不自动迁移。夸克官方组件在 Codex 环境完成 Mac 实测，独立桌面授权接入仍未验证。Windows 原生和真实游戏读回仍待按验证文档完成。
+用户确认 Windows 进度更新、两端同账号且 Windows 使用 Mod；初期曾采用 Windows 为首次来源的限制，已按用户后续明确要求取消：任一端均可首次上传，由使用者自行判断。用户同意找不到新版 Steam 缓存时继续开发，之后从 Windows 上传夸克。首轮使用 JavaScript ES modules + Electron，容器采用有界 JSON/base64，原版与 Mod 逻辑分组；未知游戏布局不自动迁移。夸克官方组件在 Codex 环境完成 Mac 实测，独立桌面授权接入仍未验证。Windows 原生和真实游戏读回仍待按验证文档完成。
+
+## 0.1.1 用户修订
+
+上传不因操作系统或首次配对状态而锁定。档位摘要显示所有角色战绩（胜、负、胜率、最高进阶）、总战绩、累计时长、存档更新时间，以及有明确来源/时间的 Mod 加载与检测数量。新上传快照保留摘要，旧版本不伪造缺失数据。

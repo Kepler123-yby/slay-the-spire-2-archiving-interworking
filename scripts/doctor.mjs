@@ -1,10 +1,13 @@
+import { summarize } from "../src/summary.mjs";
+import { readEnvironment } from "../src/environment.mjs";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { discover, assertGameClosed } from "../src/platform.mjs";
 import { readFiles, contentHash } from "../src/snapshot.mjs";
 for (const p of await discover()) {
   const f = await readFiles(p.dir);
   const progress = f.find((f) => f.path === "progress.save");
   const d = JSON.parse(Buffer.from(progress.data, "base64"));
-  const defect = d.character_stats?.find?.((s) => s.id === "CHARACTER.DEFECT");
   console.log(
     JSON.stringify({
       profile: p.profile,
@@ -12,9 +15,12 @@ for (const p of await discover()) {
       files: f.length,
       bytes: f.reduce((n, x) => n + x.size, 0),
       hash: contentHash(f),
-      defect: defect
-        ? { max_ascension: defect.max_ascension, total_wins: defect.total_wins }
-        : null,
+      summary: summarize(d, {
+        environment: await readEnvironment(),
+        modifiedAt: (
+          await fs.stat(path.join(p.dir, "progress.save"))
+        ).mtime.toISOString(),
+      }),
     }),
   );
 }

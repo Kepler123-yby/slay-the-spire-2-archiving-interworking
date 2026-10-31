@@ -207,3 +207,99 @@ aside,
 section {
   overflow-y: auto;
 }
+#overview {
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #c4d3df;
+}
+.character-record {
+  overflow-x: auto;
+}
+.character-record table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.character-record caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.character-record th,
+.character-record td {
+  padding: 9px 5px;
+  border-bottom: 1px solid #d4dfe7;
+  text-align: right;
+  white-space: nowrap;
+}
+.character-record th:first-child {
+  text-align: left;
+}
+.character-record thead th {
+  color: #526b7d;
+  font-weight: 500;
+}
+.character-record tbody th {
+  font-weight: 500;
+}
+.save-metrics p {
+  margin: 6px 0;
+}
+.save-metrics small {
+  display: block;
+  color: #698193;
+  font-size: 11px;
+}
+.cloud-summary {
+  padding-top: 8px;
+}
+.cloud-summary details {
+  padding-top: 8px;
+  border: 0;
+}
+.cloud-summary summary {
+  font-size: 12px;
+  margin: 5px 0;
+}
+.version {
+  align-items: flex-start;
+}
+.version > div {
+  min-width: 0;
+}
+.versions {
+  min-height: 120px;
+}
+.utility-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 8px 0;
+}
+.utility-actions button {
+  padding: 8px 5px;
+  font-size: 12px;
+}
+.utility-actions button:last-child {
+  grid-column: 1 / -1;
+}
+#overview > .save-metrics {
+  margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 16px;
+}
+#overview > .save-metrics p {
+  margin: 0;
+}
+#overview > .save-metrics small {
+  font-size: 11px;
+}
+.local {
+  padding: 12px 0;
+}
+section {
+  overflow-anchor: none;
+}

@@ -14,6 +14,7 @@ import {
   digest,
   LIMIT,
 } from "./snapshot.mjs";
+import { readEnvironment } from "./environment.mjs";
 import { assertGameClosed } from "./platform.mjs";
 export function heads(versions) {
   const parents = new Set(versions.flatMap((v) => v.parents));
@@ -30,9 +31,9 @@ export class Service {
     quark,
     stateDir,
     checkGame = assertGameClosed,
-    allowInitialUpload = process.platform === "win32",
+    getEnvironment = readEnvironment,
   }) {
-    Object.assign(this, { quark, stateDir, checkGame, allowInitialUpload });
+    Object.assign(this, { quark, stateDir, checkGame, getEnvironment });
     this.busy = false;
   }
   async exclusive(fn) {
@@ -83,9 +84,9 @@ export class Service {
     for (const item of items.filter((x) =>
       /^[a-f0-9-]{36}\.ready\.json$/.test(x.filename),
     )) {
-      if (item.size > 32768) throw Error("云端完成标记过大");
+      if (item.size > 128 * 1024) throw Error("云端完成标记过大");
       const file = await this.quark.get(item.fid);
-      if ((await fs.stat(file)).size > 32768) throw Error("完成标记超限");
+      if ((await fs.stat(file)).size > 128 * 1024) throw Error("完成标记超限");
       let m;
       try {
         m = JSON.parse(await fs.readFile(file, "utf8"));
@@ -117,7 +118,12 @@ export class Service {
     return this.exclusive(async () => {
       await this.checkGame();
       await recover(p.dir);
-      const s = await capture(p.dir, this.identity(p));
+      const s = await capture(
+        p.dir,
+        this.identity(p),
+        [],
+        await this.getEnvironment(),
+      );
       await atomicJSON(path.join(this.scope(p), "backups", s.id + ".json"), s);
       return "本地备份已保存";
     });
@@ -133,14 +139,11 @@ export class Service {
       await this.checkGame();
       await recover(p.dir);
       const base = await this.base(p);
-      if (!base && !this.allowInitialUpload)
-        throw Error(
-          "Mac 首次接入仅允许接收：请先从 Windows 上传最新进度，再在 Mac 下载应用",
-        );
       const s = await capture(
         p.dir,
         this.identity(p),
         base ? [...new Set([base.id, ...(base.resolved || [])])] : [],
+        await this.getEnvironment(),
       );
       const root = this.scope(p),
         file = path.join(root, "outgoing", s.id + ".snapshot.json");

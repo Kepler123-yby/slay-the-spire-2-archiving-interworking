@@ -34,13 +34,16 @@ await fs.writeFile(path.join(dir, "prefs.save"), "local preference");
 const s = new Service({
   quark: cloud,
   stateDir: path.join(root, "state"),
-  allowInitialUpload: true,
   checkGame: async () => {},
 });
 try {
   await s.upload(p);
   const versions = await s.versions(p);
-  if (versions.length !== 1 || versions[0].summary.defectAscension !== 6)
+  if (
+    versions.length !== 1 ||
+    versions[0].summary.characters.find((c) => c.id === "CHARACTER.DEFECT")
+      ?.ascension !== 6
+  )
     throw Error("云端版本摘要验证失败");
   await fs.writeFile(path.join(dir, "progress.save"), progress(5));
   await s.download(p, versions[0].id, true);

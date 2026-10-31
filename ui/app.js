@@ -1,3 +1,4 @@
+import { metrics, characterTable, cloudSummary } from "./summary-view.mjs";
 const $ = (id) => document.getElementById(id);
 let busy = false,
   profiles = [];
@@ -12,8 +13,7 @@ function buttons() {
   document
     .querySelectorAll("button,select")
     .forEach((b) => (b.disabled = busy));
-  $("upload").disabled =
-    busy || !profiles.find((p) => p.key === key())?.canUpload;
+  $("upload").disabled = busy || !profiles.find((p) => p.key === key());
 }
 async function call(action, args = {}) {
   if (busy) return;
@@ -52,16 +52,15 @@ function local() {
     $("local").append(
       text("strong", p.profile + " · " + p.files + " 个存档文件"),
     );
-    if (p.defect)
-      $("local").append(
-        text(
-          "p",
-          "故障机器人：进阶 " +
-            p.defect.ascension +
-            " / 总胜利 " +
-            p.defect.wins,
-        ),
-      );
+    $("local").append(metrics(p.summary, { compact: true }));
+    $("overview").replaceChildren(
+      text("h2", p.profile + " · 档位概览"),
+      metrics(p.summary),
+      characterTable(p.summary),
+    );
+    $("overview").parentElement.scrollTop = 0;
+  } else {
+    $("overview").replaceChildren(text("p", "请选择有效档位查看战绩。"));
   }
   buttons();
 }
@@ -110,7 +109,7 @@ $("refresh").onclick = async () => {
     $("versions").append(
       text(
         "p",
-        "夸克中还没有这个档位的完整版本。请先在 Windows 上传最新进度。",
+        "夸克中还没有这个档位的完整版本。可在任一电脑上传你选择的进度。",
       ),
     );
   if (versions[0]?.branches > 1)
@@ -128,16 +127,7 @@ $("refresh").onclick = async () => {
       text("strong", new Date(v.createdAt).toLocaleString()),
       text("small", (v.device || "来源未知") + " · " + v.id.slice(0, 8)),
     );
-    if (v.summary)
-      info.append(
-        text(
-          "p",
-          "故障机器人：进阶 " +
-            v.summary.defectAscension +
-            " / 总胜利 " +
-            v.summary.defectWins,
-        ),
-      );
+    info.append(cloudSummary(v.summary));
     const button = text("button", "下载并应用");
     button.onclick = () => mutate("download", { id: v.id });
     row.append(info, button);

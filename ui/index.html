@@ -30,28 +30,25 @@
           <option value="vanilla">原版进度</option>
         </select>
         <div id="local" class="local"></div>
-        <p class="warning">
-          首次以 Windows 最新进度为准。Mac 下载应用前，上传保持锁定。
-        </p>
-        <p>
-          按游戏实际目录选择档位。同步组用于隔离云端版本，不会替你切换
-          Mod；两端需使用一致的 Mod 环境。
-        </p>
-        <button id="backup">备份本机进度</button
-        ><button id="login">登录夸克网盘</button
-        ><button id="probe">验证夸克连接</button>
         <div class="checks">
           <label
             ><input id="ready" type="checkbox" />我已关闭两端 Steam
             云，确认游戏版本与 Mod 环境一致</label
           >
         </div>
-        <p class="hint">
-          如果尚未取回 Windows 的 Steam 云进度，先保留现状，不要勾选。
-        </p>
         <button id="upload" class="primary">上传本机进度</button>
+        <div class="utility-actions">
+          <button id="backup">备份本机进度</button>
+          <button id="login">登录夸克网盘</button>
+          <button id="probe">验证夸克连接</button>
+        </div>
+        <p class="hint">
+          自行选择上传来源。每次上传保留独立版本，应用前自动备份。同步组不会切换游戏的
+          Mod。
+        </p>
       </aside>
       <section>
+        <div id="overview" aria-live="polite"></div>
         <div class="sectionhead">
           <h2>云端版本</h2>
           <button id="refresh">刷新版本</button>
@@ -73,6 +70,6 @@
         </div>
       </section>
     </main>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>
