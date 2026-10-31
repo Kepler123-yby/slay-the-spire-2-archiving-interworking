@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self';script-src 'self';style-src 'self';img-src 'self' data:;connect-src 'none'"
+    />
+    <title>尖塔存档桥</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <span class="mark">♜</span>
+      <div>
+        <h1>尖塔存档桥</h1>
+        <p>在下一台电脑，继续你的攀登。</p>
+      </div>
+      <span class="edition">验证版</span>
+    </header>
+    <main>
+      <aside>
+        <h2>本机进度</h2>
+        <label for="profiles">Steam 档位</label
+        ><select id="profiles"></select
+        ><label for="group">本次同步组</label
+        ><select id="group">
+          <option value="modded">Mod 进度</option>
+          <option value="vanilla">原版进度</option>
+        </select>
+        <div id="local" class="local"></div>
+        <p class="warning">
+          首次以 Windows 最新进度为准。Mac 下载应用前，上传保持锁定。
+        </p>
+        <p>
+          按游戏实际目录选择档位。同步组用于隔离云端版本，不会替你切换
+          Mod；两端需使用一致的 Mod 环境。
+        </p>
+        <button id="backup">备份本机进度</button
+        ><button id="login">登录夸克网盘</button
+        ><button id="probe">验证夸克连接</button>
+        <div class="checks">
+          <label
+            ><input id="ready" type="checkbox" />我已关闭两端 Steam
+            云，确认游戏版本与 Mod 环境一致</label
+          >
+        </div>
+        <p class="hint">
+          如果尚未取回 Windows 的 Steam 云进度，先保留现状，不要勾选。
+        </p>
+        <button id="upload" class="primary">上传本机进度</button>
+      </aside>
+      <section>
+        <div class="sectionhead">
+          <h2>云端版本</h2>
+          <button id="refresh">刷新版本</button>
+        </div>
+        <p>每次上传保存一个完整版本。选择来源、时间都正确的进度后再应用。</p>
+        <div id="versions" class="versions">
+          <p class="empty">
+            点击“刷新版本”查看夸克中的存档。<br />Steam
+            云与夸克是两个独立的存储位置。
+          </p>
+        </div>
+        <details>
+          <summary>恢复本地备份</summary>
+          <button id="listBackups">查看备份</button>
+          <div id="backups"></div>
+        </details>
+        <div id="status" role="status" aria-live="polite">
+          准备就绪。真实存档尚未上传或修改。
+        </div>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

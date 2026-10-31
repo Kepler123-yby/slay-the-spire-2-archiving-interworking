@@ -1,0 +1,209 @@
+:root {
+  font:
+    14px/1.65 -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+  color: #243e55;
+  background: #e7eff4;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 28px 36px;
+  background: #182a3a;
+  color: #f8fbfd;
+}
+.mark {
+  font-size: 52px;
+  color: #c5a36e;
+}
+h1 {
+  font-family: "Songti SC", serif;
+  font-size: 30px;
+  margin: 0;
+  font-weight: 600;
+}
+header p {
+  margin: 3px 0;
+  color: #b7cbd9;
+}
+.edition {
+  margin-left: auto;
+  color: #c5a36e;
+}
+main {
+  display: grid;
+  grid-template-columns: 310px 1fr;
+  min-height: 590px;
+}
+aside {
+  padding: 26px;
+  background: #dce7ef;
+  border-right: 1px solid #c4d3df;
+}
+section {
+  padding: 26px 32px;
+  background: #f8fbfd;
+}
+h2 {
+  font-size: 19px;
+  margin: 0 0 16px;
+}
+p {
+  margin: 10px 0;
+  color: #526b7d;
+}
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+select {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  margin-top: 8px;
+  border: 1px solid #91a9ba;
+  background: #fff;
+  border-radius: 5px;
+}
+button {
+  padding: 8px 15px;
+  border: 1px solid #91a9ba;
+  border-radius: 5px;
+  background: #f8fbfd;
+  cursor: pointer;
+}
+button:hover {
+  background: #e7eff4;
+}
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 3px solid #ae8748;
+  outline-offset: 3px;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+aside > button {
+  width: 100%;
+  margin: 5px 0;
+}
+.primary {
+  background: #243e55;
+  color: white;
+  border-color: #243e55;
+}
+.primary:hover {
+  background: #35566f;
+}
+.local {
+  padding: 15px 0;
+  font-size: 15px;
+}
+.warning {
+  border-left: 3px solid #ae8748;
+  padding-left: 12px;
+  color: #77581e;
+}
+.checks {
+  margin: 18px 0 4px;
+}
+.checks input {
+  accent-color: #243e55;
+}
+.hint {
+  font-size: 12px;
+}
+.sectionhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sectionhead h2 {
+  margin: 0;
+}
+.versions {
+  min-height: 225px;
+  padding: 15px 0;
+}
+.empty {
+  padding: 35px 20px;
+  text-align: center;
+  color: #698193;
+}
+.version {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border-top: 1px solid #d4dfe7;
+  padding: 15px 0;
+}
+.version div {
+  flex: 1;
+}
+.version strong {
+  display: block;
+}
+.version small {
+  color: #698193;
+}
+details {
+  border-top: 1px solid #d4dfe7;
+  padding-top: 18px;
+}
+summary {
+  cursor: pointer;
+  margin-bottom: 15px;
+}
+#status {
+  padding: 15px;
+  margin-top: 20px;
+  background: #e7eff4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: 5px;
+}
+#backups button {
+  display: block;
+  margin: 7px 0;
+  max-width: 100%;
+  font-size: 12px;
+}
+.error {
+  color: #9a352d;
+}
+@media (max-width: 880px) {
+  main {
+    grid-template-columns: 280px 1fr;
+  }
+  section {
+    padding: 22px;
+  }
+  header {
+    padding: 22px;
+  }
+}
+
+header {
+  height: 142px;
+}
+main {
+  min-height: 0;
+  height: calc(100vh - 142px);
+}
+aside,
+section {
+  overflow-y: auto;
+}
