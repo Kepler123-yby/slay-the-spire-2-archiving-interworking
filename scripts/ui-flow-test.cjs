@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 app.setPath("userData", path.resolve(".data/ui-flow-test"));
 app.whenReady().then(async () => {
   const calls = [];
+  let backupRecords = [];
   const ids = [
     "11111111-1111-4111-8111-111111111111",
     "22222222-2222-4222-8222-222222222222",
@@ -31,6 +32,7 @@ app.whenReady().then(async () => {
       return {
         ok: true,
         data: [1, 2].map((n) => ({
+          account: "76561198000000000",
           key: "test-profile" + n,
           profile: "profile" + n,
           layout: "shared",
@@ -48,6 +50,12 @@ app.whenReady().then(async () => {
           summary,
         })),
       };
+    if (action === "backups")
+      return { ok: true, data: { limit: 2, items: backupRecords } };
+    if (action === "deleteBackup") {
+      backupRecords = backupRecords.filter((b) => b.key !== args.id);
+      return { ok: true, data: "已删除本机备份" };
+    }
     if (action === "download")
       return { ok: true, data: "已下载并覆盖当前存档；测试完成" };
     return { ok: false, error: "测试未允许的动作" };
@@ -129,6 +137,50 @@ app.whenReady().then(async () => {
     assert.equal(
       await evaluate("document.getElementById('overwrite').disabled"),
       true,
+    );
+    backupRecords = [1, 2].map((n) => ({
+      key: String(n).repeat(64),
+      id: ids[n - 1],
+      account: "76561198000000000",
+      profile: "profile" + n,
+      group: "modded",
+      createdAt: "2026-01-01T00:00:00Z",
+      summary,
+      corrupt: false,
+    }));
+    await evaluate("document.getElementById('listBackups').click()");
+    await waitFor(
+      "document.querySelectorAll('[data-backup-remove]').length===2",
+    );
+    assert.equal(
+      await evaluate("document.getElementById('backup').disabled"),
+      true,
+    );
+    assert.equal(
+      await evaluate(
+        "[...document.querySelectorAll('[data-restore-key]')].every(b=>b.disabled)",
+      ),
+      true,
+    );
+    await evaluate("document.querySelector('[data-backup-remove]').click()");
+    await waitFor(
+      "document.getElementById('backupCapacity').textContent.includes('1 / 2')",
+    );
+    assert.equal(
+      await evaluate("document.getElementById('backup').disabled"),
+      false,
+    );
+    assert.equal(calls.filter((c) => c.action === "deleteBackup").length, 1);
+    assert.equal(
+      await evaluate("document.querySelector('[data-restore-key]').disabled"),
+      false,
+    );
+    await evaluate(
+      "document.getElementById('backups').closest('details').open=true;document.getElementById('backups').scrollIntoView({block:'center'})",
+    );
+    await fs.writeFile(
+      path.resolve(".data/ui-backup-management-preview.png"),
+      (await win.webContents.capturePage()).toPNG(),
     );
     console.log(
       "UI_FLOW_OK: 显式选择、无默认覆盖、切换档位失效、只在点击覆盖后提交选定版本；仅合成数据。",

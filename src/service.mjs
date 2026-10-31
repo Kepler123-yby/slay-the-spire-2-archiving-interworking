@@ -14,6 +14,7 @@ import {
   digest,
   LIMIT,
 } from "./snapshot.mjs";
+import { Backups, LOCAL_BACKUP_LIMIT } from "./backups.mjs";
 import { readEnvironment } from "./environment.mjs";
 import { assertGameClosed } from "./platform.mjs";
 export function heads(versions) {
@@ -32,8 +33,15 @@ export class Service {
     stateDir,
     checkGame = assertGameClosed,
     getEnvironment = readEnvironment,
+    backupStore,
   }) {
     Object.assign(this, { quark, stateDir, checkGame, getEnvironment });
+    this.backupStore =
+      backupStore ||
+      new Backups({
+        root: path.join(stateDir || ".data", "local-backups"),
+        legacyRoots: stateDir ? [stateDir] : [],
+      });
     this.busy = false;
   }
   async exclusive(fn) {
@@ -118,21 +126,37 @@ export class Service {
     return this.exclusive(async () => {
       await this.checkGame();
       await recover(p.dir);
+      await this.backupStore.assertCapacity();
       const s = await capture(
         p.dir,
         this.identity(p),
         [],
         await this.getEnvironment(),
       );
-      await atomicJSON(path.join(this.scope(p), "backups", s.id + ".json"), s);
+      await this.backupStore.save(s);
       return "本地备份已保存，仅保存在本机；备份 ID：" + s.id;
     });
   }
   async backups(p) {
-    const dir = path.join(this.scope(p), "backups");
-    return (await fs.readdir(dir).catch(() => []))
-      .filter((x) => /^[a-f0-9-]{36}\.json$/.test(x))
-      .map((x) => x.slice(0, -5));
+    return (await this.backupStore.list())
+      .filter(
+        (b) =>
+          !b.corrupt &&
+          b.account === p.account &&
+          b.profile === p.profile &&
+          b.group === p.group,
+      )
+      .map((b) => b.id);
+  }
+  async backupInfo() {
+    return { limit: LOCAL_BACKUP_LIMIT, items: await this.backupStore.list() };
+  }
+  async deleteBackup(key, confirmed) {
+    return this.exclusive(async () => {
+      if (confirmed !== true) throw Error("删除备份需要确认");
+      const id = await this.backupStore.remove(key);
+      return "已删除本机备份：" + id;
+    });
   }
   async upload(p) {
     return this.exclusive(async () => {
@@ -186,6 +210,7 @@ export class Service {
         );
       await this.checkGame();
       await recover(p.dir);
+      await this.backupStore.assertCapacity();
       const before = contentHash(await readFiles(p.dir));
       const versions = await this.versions(p),
         v = versions.find((x) => x.id === id);
@@ -208,6 +233,7 @@ export class Service {
       if (contentHash(await readFiles(p.dir)) !== before)
         throw Error("下载期间本机进度变化，请重新操作");
       const backup = await apply(p.dir, s, this.scope(p), {
+        saveBackup: (snapshot) => this.backupStore.save(snapshot),
         checkpoint: async () => {
           await this.checkGame();
         },
@@ -222,11 +248,16 @@ export class Service {
   }
   async restore(p, id, confirm) {
     return this.exclusive(async () => {
-      if (!confirm || !/^[a-f0-9-]{36}$/.test(id))
+      if (
+        !confirm ||
+        typeof id !== "string" ||
+        !/^(?:[a-f0-9-]{36}|[a-f0-9]{64})$/.test(id)
+      )
         throw Error("请选择备份并确认恢复");
       await this.checkGame();
       await recover(p.dir);
-      const s = await load(path.join(this.scope(p), "backups", id + ".json"));
+      await this.backupStore.assertCapacity();
+      const s = await this.backupStore.read(id);
       if (
         s.account !== p.account ||
         s.profile !== p.profile ||
@@ -234,6 +265,7 @@ export class Service {
       )
         throw Error("备份身份不匹配");
       await apply(p.dir, s, this.scope(p), {
+        saveBackup: (snapshot) => this.backupStore.save(snapshot),
         checkpoint: async () => this.checkGame(),
       });
       await fs.rm(path.join(this.scope(p), "baseline.json"), { force: true });

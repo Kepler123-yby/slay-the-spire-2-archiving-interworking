@@ -190,7 +190,7 @@ test("手动备份仅写本地并返回可恢复的备份ID，不调用夸克", 
   assert.match(message, /仅保存在本机/);
   const s = JSON.parse(
     await fs.readFile(
-      path.join(service.scope(p), "backups", id + ".json"),
+      path.join(service.backupStore.root, id + ".json"),
       "utf8",
     ),
   );

@@ -30,6 +30,7 @@
           <option value="vanilla">原版进度</option>
         </select>
         <div id="local" class="local"></div>
+        <p id="backupCapacity" class="hint">正在读取本机备份数量…</p>
         <div class="checks">
           <label
             ><input id="ready" type="checkbox" />我已关闭两端 Steam
@@ -53,7 +54,9 @@
           <h2>云端版本</h2>
           <button id="refresh">刷新版本</button>
         </div>
-        <p>每次上传保存一个完整版本。选择来源、时间都正确的进度后再应用。</p>
+        <p>
+          当前云端仍保留历史版本，整个工具单份覆盖尚待接入升级；上传会继续新增版本。
+        </p>
         <div class="overwrite-flow">
           <label for="cloudVersion">选择要覆盖到本机的云端版本</label>
           <select id="cloudVersion" disabled>
@@ -76,7 +79,7 @@
           </p>
         </div>
         <details>
-          <summary>恢复本地备份</summary>
+          <summary>管理与恢复本地备份（本机最多 2 份）</summary>
           <button id="listBackups">查看备份</button>
           <div id="backups"></div>
         </details>

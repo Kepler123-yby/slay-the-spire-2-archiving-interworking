@@ -213,7 +213,12 @@ export async function recover(dir) {
   await fs.rm(j);
   return true;
 }
-export async function apply(dir, s, stateDir, { checkpoint = () => {} } = {}) {
+export async function apply(
+  dir,
+  s,
+  stateDir,
+  { checkpoint = () => {}, saveBackup } = {},
+) {
   validate(s);
   await recover(dir);
   const current = await readFiles(dir),
@@ -227,7 +232,12 @@ export async function apply(dir, s, stateDir, { checkpoint = () => {} } = {}) {
       },
       [],
     );
-  await atomicJSON(path.join(stateDir, "backups", backup.id + ".json"), backup);
+  if (saveBackup) await saveBackup(backup);
+  else
+    await atomicJSON(
+      path.join(stateDir, "backups", backup.id + ".json"),
+      backup,
+    );
   const t = transaction(dir, randomUUID()),
     id = path.basename(t.old).split("spire-old-")[1];
   try {

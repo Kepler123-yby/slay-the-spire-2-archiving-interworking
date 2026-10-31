@@ -1,7 +1,11 @@
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("node:path");
-if (process.env.SPIRE_SMOKE === "1")
-  app.setPath("userData", path.resolve(".data/smoke"));
+const userDataPath =
+  process.env.SPIRE_SMOKE === "1"
+    ? path.resolve(".data/smoke")
+    : path.join(app.getPath("appData"), "SpireSaveBridge");
+require("node:fs").mkdirSync(userDataPath, { recursive: true });
+app.setPath("userData", userDataPath);
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -14,6 +18,7 @@ if (!app.requestSingleInstanceLock()) {
       { probe },
       { summarize },
       { readEnvironment },
+      { Backups },
     ] = await Promise.all([
       import("./quark.mjs"),
       import("./service.mjs"),
@@ -22,6 +27,7 @@ if (!app.requestSingleInstanceLock()) {
       import("../scripts/cloud-probe.mjs"),
       import("./summary.mjs"),
       import("./environment.mjs"),
+      import("./backups.mjs"),
     ]);
     const fs = require("node:fs/promises");
     const stateDir = app.isPackaged
@@ -36,7 +42,25 @@ if (!app.requestSingleInstanceLock()) {
         : undefined,
       notify: (t) => notices.push(t),
     });
-    const service = new Service({ quark: q, stateDir });
+    const backupStore = new Backups({
+      root:
+        process.env.SPIRE_SMOKE === "1"
+          ? path.join(stateDir, "local-backups")
+          : path.join(
+              app.getPath("appData"),
+              "SpireSaveBridge",
+              "local-backups",
+            ),
+      legacyRoots:
+        process.env.SPIRE_SMOKE === "1"
+          ? [stateDir]
+          : [
+              stateDir,
+              path.resolve(".data/desktop"),
+              path.join(app.getPath("appData"), "spire-save-bridge"),
+            ],
+    });
+    const service = new Service({ quark: q, stateDir, backupStore });
     const win = new BrowserWindow({
       width: 1080,
       height: 780,
@@ -67,18 +91,14 @@ if (!app.requestSingleInstanceLock()) {
         const p = source ? { ...source, group: args.group } : null;
         if (
           p &&
+          ["upload", "versions", "download", "backup", "restore"].includes(
+            action,
+          ) &&
           (!["vanilla", "modded"].includes(p.group) ||
             (p.layout === "modded" && p.group !== "modded"))
         )
           throw Error("请选择与实际存档匹配的同步组");
-        const need = [
-          "upload",
-          "versions",
-          "download",
-          "backup",
-          "backups",
-          "restore",
-        ];
+        const need = ["upload", "versions", "download", "backup", "restore"];
         if (need.includes(action) && !p) throw Error("请选择有效的本机档位");
         let data;
         if (action === "status") {
@@ -124,14 +144,29 @@ if (!app.requestSingleInstanceLock()) {
           data = await service.exclusive(() => service.versions(p));
           const h = heads(data);
           data = data.map((v) => ({ ...v, branches: h.length }));
-        } else if (action === "backups") data = await service.backups(p);
-        else if (action === "backup") data = await service.backup(p);
+        } else if (action === "backups") data = await service.backupInfo();
+        else if (action === "deleteBackup") {
+          const info = await service.backupInfo();
+          const selected = info.items.find((b) => b.key === args.id);
+          if (!selected) throw Error("请选择有效的本地备份");
+          const confirmation = await dialog.showMessageBox(win, {
+            type: "warning",
+            buttons: ["取消", "删除这份本地备份"],
+            defaultId: 0,
+            cancelId: 0,
+            message: "删除所选本地备份？",
+            detail: `备份 ID：${selected.id}\nSteam 账号：${selected.account || "未知"}\n档位：${selected.profile || "未知"} / ${selected.group || "未知"}\n此操作只删除本机备份，不修改游戏当前存档或夸克文件。删除后无法在工具中恢复这份备份。`,
+          });
+          if (confirmation.response !== 1) throw Error("操作已取消");
+          data = await service.deleteBackup(selected.key, true);
+        } else if (action === "backup") data = await service.backup(p);
         else if (["upload", "download", "restore"].includes(action)) {
           if (args.ready !== true)
             throw Error("请先确认 Steam 云已关闭且两端版本、Mod 环境一致");
           if (
             action !== "upload" &&
-            (typeof args.id !== "string" || !/^[a-f0-9-]{36}$/.test(args.id))
+            (typeof args.id !== "string" ||
+              !/^(?:[a-f0-9-]{36}|[a-f0-9]{64})$/.test(args.id))
           )
             throw Error("请先选择有效的云端版本或本地备份");
           const result = await dialog.showMessageBox(win, {

@@ -3,6 +3,9 @@ import { metrics, characterTable, cloudSummary } from "./summary-view.mjs";
 const $ = (id) => document.getElementById(id);
 let busy = false,
   profiles = [];
+let backupItems = [],
+  backupLimit = 2,
+  backupCount = null;
 const selection = new VersionSelection();
 const scope = () => key() + "|" + $("group").value;
 function status(text, error = false) {
@@ -16,9 +19,24 @@ function buttons() {
   document
     .querySelectorAll("button,select")
     .forEach((b) => (b.disabled = busy));
+  const full = backupCount === null || backupCount >= backupLimit;
+  $("backup").disabled = busy || full || !profiles.find((p) => p.key === key());
+  document.querySelectorAll("[data-restore-key]").forEach((b) => {
+    const record = backupItems.find((x) => x.key === b.dataset.restoreKey);
+    const p = profiles.find((x) => x.key === key());
+    b.disabled =
+      busy ||
+      full ||
+      !record ||
+      record.corrupt ||
+      !p ||
+      record.account !== p.account ||
+      record.profile !== p.profile ||
+      record.group !== $("group").value;
+  });
   $("upload").disabled = busy || !profiles.find((p) => p.key === key());
   $("cloudVersion").disabled = busy || !selection.versions.length;
-  $("overwrite").disabled = busy || !selection.selected(scope());
+  $("overwrite").disabled = busy || full || !selection.selected(scope());
 }
 async function call(action, args = {}) {
   if (busy) return;
@@ -114,6 +132,58 @@ $("overwrite").onclick = () => {
   if (!v) return status("请先刷新并选择要覆盖到本机的云端版本。", true);
   return mutate("download", { id: v.id });
 };
+function renderBackups() {
+  $("backups").replaceChildren();
+  if (!backupItems.length) $("backups").append(text("p", "本机还没有备份。"));
+  for (const b of backupItems) {
+    const row = text("div", "");
+    row.className = "backup-entry";
+    row.append(
+      text(
+        "strong",
+        b.corrupt
+          ? "损坏的备份（只能删除）"
+          : b.profile +
+              " · " +
+              (b.group === "modded" ? "Mod 进度" : "原版进度"),
+      ),
+      text(
+        "p",
+        (b.createdAt ? new Date(b.createdAt).toLocaleString() : "时间未知") +
+          " · " +
+          b.id,
+      ),
+    );
+    row.append(text("small", "Steam 账号：" + (b.account || "未知")));
+    if (b.summary) row.append(cloudSummary(b.summary));
+    const restore = text("button", "恢复此备份");
+    restore.dataset.restoreKey = b.key;
+    restore.onclick = () => mutate("restore", { id: b.key });
+    const remove = text("button", "删除此备份");
+    remove.dataset.backupRemove = b.key;
+    remove.onclick = () => mutate("deleteBackup", { id: b.key });
+    row.append(restore, remove);
+    $("backups").append(row);
+  }
+  buttons();
+}
+async function refreshBackups() {
+  const info = await call("backups");
+  if (!info) return;
+  backupItems = info.items;
+  backupLimit = info.limit;
+  backupCount = info.items.length;
+  $("backupCapacity").textContent =
+    "本机备份 " +
+    backupCount +
+    " / " +
+    backupLimit +
+    "（全部档位合计）" +
+    (backupCount >= backupLimit
+      ? "，请先在下方删除备份，再备份或覆盖。"
+      : "；覆盖前自动备份也占用一个名额。");
+  renderBackups();
+}
 async function init() {
   const previous = key();
   const data = await call("status");
@@ -132,6 +202,7 @@ async function init() {
   }
   if (data.some((p) => p.key === previous)) $("profiles").value = previous;
   local();
+  await refreshBackups();
   clearCloud("请刷新当前档位的云端版本。");
   if (!data.length)
     status(
@@ -146,12 +217,12 @@ $("group").onchange = () => {
 };
 $("profiles").onchange = () => {
   local();
+  renderBackups();
   clearCloud("切换档位后请刷新云端版本。");
-  $("backups").replaceChildren();
 };
 $("login").onclick = () => call("login");
 $("probe").onclick = () => call("probe");
-$("backup").onclick = () => call("backup");
+$("backup").onclick = () => mutate("backup");
 $("upload").onclick = () => mutate("upload");
 $("refresh").onclick = async () => {
   clearCloud("正在刷新云端版本…");
@@ -208,22 +279,14 @@ $("refresh").onclick = async () => {
     $("versions").append(row);
   }
 };
-$("listBackups").onclick = async () => {
-  const ids = await call("backups");
-  if (!ids) return;
-  $("backups").replaceChildren();
-  if (!ids.length) $("backups").append(text("p", "还没有本地备份。"));
-  for (const id of ids) {
-    const b = text("button", "恢复 " + id);
-    b.onclick = () => mutate("restore", { id });
-    $("backups").append(b);
-  }
-};
+$("listBackups").onclick = refreshBackups;
 async function mutate(action, args) {
   const result = await call(action, args);
   if (result !== undefined) {
     const message = $("status").textContent;
-    await init();
+    if (action === "backup" || action === "deleteBackup")
+      await refreshBackups();
+    else await init();
     status(message);
   }
 }

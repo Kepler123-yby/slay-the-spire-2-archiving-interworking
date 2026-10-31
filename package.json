@@ -1,8 +1,8 @@
 {
   "name": "spire-save-bridge",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
-  "description": "Slay the Spire 2 Quark save bridge — Mac validation build",
+  "description": "Slay the Spire 2 Quark save bridge \u2014 Mac validation build",
   "type": "module",
   "main": "src/main.cjs",
   "scripts": {
