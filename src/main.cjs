@@ -342,8 +342,12 @@ if (!app.requestSingleInstanceLock()) {
         const refreshed = await win.webContents.executeJavaScript(
           "document.getElementById('refresh').onclick()",
         );
-        if (refreshed !== true || agents.foregroundRequests !== 0)
-          throw Error("手动刷新未优先完成或任务占用未释放");
+        if (refreshed !== true || agents.foregroundRequests !== 0) {
+          const detail = await win.webContents.executeJavaScript(
+            "document.getElementById('status').textContent",
+          );
+          throw Error(`手动刷新未优先完成或任务占用未释放（占用 ${agents.foregroundRequests}）：${detail}`);
+        }
         console.log("CLOUD_PRIORITY_SMOKE_OK");
         app.quit();
       }
