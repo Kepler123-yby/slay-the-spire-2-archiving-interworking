@@ -168,3 +168,34 @@ test("云端版本保留完整角色战绩及上传时Mod环境", async (t) => {
   assert.equal(v.summary.wins, 9);
   assert.deepEqual(v.summary.environment, environment);
 });
+test("手动备份仅写本地并返回可恢复的备份ID，不调用夸克", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "spire-local-backup-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const p = {
+    account: "76561198000000000",
+    profile: "profile1",
+    group: "vanilla",
+    dir: path.join(root, "saves"),
+  };
+  await fs.mkdir(p.dir);
+  await fs.writeFile(path.join(p.dir, "progress.save"), "local progress");
+  const service = new Service({
+    stateDir: path.join(root, "state"),
+    checkGame: async () => {},
+    getEnvironment: async () => null,
+  });
+  const message = await service.backup(p);
+  const [id] = await service.backups(p);
+  assert.ok(message.includes(id));
+  assert.match(message, /仅保存在本机/);
+  const s = JSON.parse(
+    await fs.readFile(
+      path.join(service.scope(p), "backups", id + ".json"),
+      "utf8",
+    ),
+  );
+  assert.equal(
+    Buffer.from(s.files[0].data, "base64").toString(),
+    "local progress",
+  );
+});

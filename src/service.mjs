@@ -125,7 +125,7 @@ export class Service {
         await this.getEnvironment(),
       );
       await atomicJSON(path.join(this.scope(p), "backups", s.id + ".json"), s);
-      return "本地备份已保存";
+      return "本地备份已保存，仅保存在本机；备份 ID：" + s.id;
     });
   }
   async backups(p) {
@@ -217,7 +217,7 @@ export class Service {
         hash: s.contentHash,
         resolved: heads(versions).map((x) => x.id),
       });
-      return "已应用云端存档；原进度备份：" + backup;
+      return "已下载并覆盖当前存档；覆盖前的本地备份 ID：" + backup;
     });
   }
   async restore(p, id, confirm) {

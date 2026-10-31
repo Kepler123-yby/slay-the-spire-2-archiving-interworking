@@ -282,7 +282,7 @@ section {
   padding: 8px 5px;
   font-size: 12px;
 }
-.utility-actions button:last-child {
+.utility-actions button:first-child {
   grid-column: 1 / -1;
 }
 #overview > .save-metrics {
@@ -302,4 +302,21 @@ section {
 }
 section {
   overflow-anchor: none;
+}
+.overwrite-flow {
+  padding: 18px;
+  margin: 18px 0;
+  background: #e7eff4;
+  border: 1px solid #c4d3df;
+  border-radius: 6px;
+}
+.overwrite-flow > label {
+  font-weight: 600;
+}
+#selectedVersion {
+  margin: 14px 0;
+}
+#selectedVersion > strong {
+  display: block;
+  overflow-wrap: anywhere;
 }

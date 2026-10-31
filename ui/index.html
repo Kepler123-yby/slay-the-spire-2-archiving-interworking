@@ -38,7 +38,7 @@
         </div>
         <button id="upload" class="primary">上传本机进度</button>
         <div class="utility-actions">
-          <button id="backup">备份本机进度</button>
+          <button id="backup">备份本机进度（本地）</button>
           <button id="login">登录夸克网盘</button>
           <button id="probe">验证夸克连接</button>
         </div>
@@ -54,6 +54,21 @@
           <button id="refresh">刷新版本</button>
         </div>
         <p>每次上传保存一个完整版本。选择来源、时间都正确的进度后再应用。</p>
+        <div class="overwrite-flow">
+          <label for="cloudVersion">选择要覆盖到本机的云端版本</label>
+          <select id="cloudVersion" disabled>
+            <option value="">请先刷新版本，再选择来源</option>
+          </select>
+          <div id="selectedVersion" aria-live="polite">
+            <p class="hint">选择版本只会预览，不会修改存档。</p>
+          </div>
+          <button id="overwrite" class="primary" disabled>
+            下载并覆盖当前存档
+          </button>
+          <p class="hint">
+            覆盖前自动在本机保存备份，再用所选云端版本替换当前档位。覆盖前的备份不会自动上传到夸克。
+          </p>
+        </div>
         <div id="versions" class="versions">
           <p class="empty">
             点击“刷新版本”查看夸克中的存档。<br />Steam

@@ -1,7 +1,10 @@
+import { VersionSelection } from "./version-selection.mjs";
 import { metrics, characterTable, cloudSummary } from "./summary-view.mjs";
 const $ = (id) => document.getElementById(id);
 let busy = false,
   profiles = [];
+const selection = new VersionSelection();
+const scope = () => key() + "|" + $("group").value;
 function status(text, error = false) {
   $("status").textContent = text;
   $("status").classList.toggle("error", error);
@@ -14,6 +17,8 @@ function buttons() {
     .querySelectorAll("button,select")
     .forEach((b) => (b.disabled = busy));
   $("upload").disabled = busy || !profiles.find((p) => p.key === key());
+  $("cloudVersion").disabled = busy || !selection.versions.length;
+  $("overwrite").disabled = busy || !selection.selected(scope());
 }
 async function call(action, args = {}) {
   if (busy) return;
@@ -64,6 +69,51 @@ function local() {
   }
   buttons();
 }
+function clearCloud(message) {
+  selection.replace(scope(), []);
+  $("cloudVersion").replaceChildren(text("option", "请先刷新版本，再选择来源"));
+  $("cloudVersion").firstElementChild.value = "";
+  $("selectedVersion").replaceChildren(
+    text("p", "选择版本只会预览，不会修改存档。"),
+  );
+  $("versions").replaceChildren(text("p", message));
+  buttons();
+}
+function chooseVersion(id) {
+  selection.select(id);
+  const v = selection.selected(scope());
+  $("cloudVersion").value = v?.id || "";
+  $("selectedVersion").replaceChildren();
+  if (v) {
+    const p = profiles.find((p) => p.key === key());
+    $("selectedVersion").append(
+      text(
+        "p",
+        "覆盖目标：本机 " +
+          p.profile +
+          " · " +
+          ($("group").value === "modded" ? "Mod 进度" : "原版进度"),
+      ),
+      text(
+        "strong",
+        "云端来源：" +
+          (v.device || "来源未知") +
+          " · " +
+          new Date(v.createdAt).toLocaleString() +
+          " · " +
+          v.id.slice(0, 8),
+      ),
+      cloudSummary(v.summary),
+    );
+  } else $("selectedVersion").append(text("p", "请明确选择一个云端版本。"));
+  buttons();
+}
+$("cloudVersion").onchange = () => chooseVersion($("cloudVersion").value);
+$("overwrite").onclick = () => {
+  const v = selection.selected(scope());
+  if (!v) return status("请先刷新并选择要覆盖到本机的云端版本。", true);
+  return mutate("download", { id: v.id });
+};
 async function init() {
   const previous = key();
   const data = await call("status");
@@ -82,6 +132,7 @@ async function init() {
   }
   if (data.some((p) => p.key === previous)) $("profiles").value = previous;
   local();
+  clearCloud("请刷新当前档位的云端版本。");
   if (!data.length)
     status(
       "没有发现带 progress.save 的档位。请先确认游戏安装和存档路径。",
@@ -89,21 +140,41 @@ async function init() {
     );
 }
 $("group").onchange = () => {
-  $("versions").replaceChildren(text("p", "切换同步组后请刷新云端版本。"));
+  clearCloud("切换同步组后请刷新云端版本。");
   $("backups").replaceChildren();
   init();
 };
 $("profiles").onchange = () => {
   local();
-  $("versions").replaceChildren(text("p", "切换档位后请刷新云端版本。"));
+  clearCloud("切换档位后请刷新云端版本。");
+  $("backups").replaceChildren();
 };
 $("login").onclick = () => call("login");
 $("probe").onclick = () => call("probe");
 $("backup").onclick = () => call("backup");
 $("upload").onclick = () => mutate("upload");
 $("refresh").onclick = async () => {
+  clearCloud("正在刷新云端版本…");
   const versions = await call("versions");
   if (!versions) return;
+  selection.replace(scope(), versions);
+  $("cloudVersion").replaceChildren(
+    text("option", "请选择一个版本（不会自动覆盖）"),
+  );
+  $("cloudVersion").firstElementChild.value = "";
+  for (const v of versions) {
+    const option = text(
+      "option",
+      new Date(v.createdAt).toLocaleString() +
+        " · " +
+        (v.device || "来源未知") +
+        " · " +
+        v.id.slice(0, 8),
+    );
+    option.value = v.id;
+    $("cloudVersion").append(option);
+  }
+  buttons();
   $("versions").replaceChildren();
   if (!versions.length)
     $("versions").append(
@@ -128,8 +199,11 @@ $("refresh").onclick = async () => {
       text("small", (v.device || "来源未知") + " · " + v.id.slice(0, 8)),
     );
     info.append(cloudSummary(v.summary));
-    const button = text("button", "下载并应用");
-    button.onclick = () => mutate("download", { id: v.id });
+    const button = text("button", "选为覆盖来源");
+    button.onclick = () => {
+      chooseVersion(v.id);
+      $("cloudVersion").scrollIntoView({ block: "center" });
+    };
     row.append(info, button);
     $("versions").append(row);
   }

@@ -1,6 +1,6 @@
 {
   "name": "spire-save-bridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Slay the Spire 2 Quark save bridge — Mac validation build",
   "type": "module",
@@ -13,7 +13,8 @@
     "probe:cloud": "node scripts/cloud-probe.mjs",
     "pack:mac": "node scripts/pack.mjs darwin",
     "pack:windows": "node scripts/pack.mjs win32",
-    "probe:roundtrip": "node scripts/roundtrip-probe.mjs"
+    "probe:roundtrip": "node scripts/roundtrip-probe.mjs",
+    "test:ui": "electron scripts/ui-flow-test.cjs"
   },
   "engines": {
     "node": ">=22"

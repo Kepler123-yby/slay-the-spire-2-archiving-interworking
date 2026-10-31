@@ -129,15 +129,26 @@ if (!app.requestSingleInstanceLock()) {
         else if (["upload", "download", "restore"].includes(action)) {
           if (args.ready !== true)
             throw Error("请先确认 Steam 云已关闭且两端版本、Mod 环境一致");
+          if (
+            action !== "upload" &&
+            (typeof args.id !== "string" || !/^[a-f0-9-]{36}$/.test(args.id))
+          )
+            throw Error("请先选择有效的云端版本或本地备份");
           const result = await dialog.showMessageBox(win, {
             type: "warning",
-            buttons: ["取消", "继续"],
+            buttons: ["取消", action === "download" ? "下载并覆盖" : "继续"],
             defaultId: 0,
             cancelId: 0,
             message:
-              action === "upload" ? "上传当前本机进度？" : "应用所选进度？",
+              action === "upload"
+                ? "上传当前本机进度？"
+                : action === "download"
+                  ? "用所选云端版本覆盖当前存档？"
+                  : "用本地备份恢复当前存档？",
             detail:
-              "由你决定上传或应用哪份进度。上传会保留为独立版本；应用前会备份本机存档。",
+              action === "upload"
+                ? "上传会创建独立的夸克云端版本，不替换本机进度。"
+                : `目标档位：${p.profile}（${p.group === "modded" ? "Mod 进度" : "原版进度"}）\n目标目录：${p.dir}\n所选版本/备份：${args.id}\n\n先保存本地备份，再替换当前档位；这份覆盖前的备份不会自动上传夸克。`,
           });
           if (result.response !== 1) throw Error("操作已取消");
           data =
